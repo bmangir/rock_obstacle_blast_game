@@ -22,5 +22,10 @@ namespace Blocks
         Stone,
         Vase
     }
-
+    
+    public enum RocketDirection
+    {
+        Horizontal,
+        Vertical
+    }
 }

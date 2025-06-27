@@ -10,6 +10,8 @@ namespace Managers
     {
         public GameObject cubePrefab;
         [SerializeField] private GameObject obstaclePrefab;
+        [SerializeField] private GameObject rocketPrefab;
+        
         public LevelLoader levelLoader;
 
         private int width;
@@ -63,6 +65,10 @@ namespace Managers
                 if (type == "bo" || type == "s" || type == "v")
                 {
                     CreateObstacle(type, pos, worldPos);
+                }
+                else if (type == "hro" || type == "vro")
+                {
+                    CreateRocket(type, pos, worldPos);
                 }
                 else
                 {
@@ -129,6 +135,25 @@ namespace Managers
 
             block.Initialize(obstacleType);
         }
+        
+        private void CreateRocket(string typeCode, Vector2Int gridPos, Vector3 worldPos)
+        {
+            GameObject obj = Instantiate(rocketPrefab, worldPos, Quaternion.identity, gridRoot);
+            RocketBlock rocket = obj.GetComponent<RocketBlock>();
+
+            if (rocket == null)
+            {
+                Debug.LogError("Rocket prefab missing RocketBlock script");
+                return;
+            }
+
+            RocketDirection direction = typeCode == "hro"
+                ? RocketDirection.Horizontal
+                : RocketDirection.Vertical;
+
+            rocket.Initialize(direction);
+        }
+
 
         string GetRandomColorCode()
         {
