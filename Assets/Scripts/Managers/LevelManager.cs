@@ -22,13 +22,8 @@ namespace Managers
                 Destroy(gameObject); // Avoid duplicates
             }
 
-            LoadLevel();
+            LoadCurrentLevel();
         }
-        
-        void LoadLevel()
-    {
-        CurrentLevel = PlayerPrefs.GetInt("currentLevel", 1);
-    }
 
         private void LoadCurrentLevel()
         {
