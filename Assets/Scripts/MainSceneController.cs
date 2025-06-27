@@ -20,7 +20,7 @@ namespace Scripts
         void StartLevel(int level)
         {
             // Load the game scene and pass the level number if needed
-            SceneManager.LoadScene("GameScene");
+            SceneManager.LoadScene("LevelScene");
         }
     }
 }
