@@ -10,19 +10,25 @@ namespace Managers
         public int CurrentLevel { get; private set; }
         public int MaxLevel = 10;
 
-        private void Awake()
+        void Awake()
         {
-            if (Instance != null && Instance != this)
+            if (Instance == null)
             {
-                Destroy(gameObject);
-                return;
+                Instance = this;
+                DontDestroyOnLoad(gameObject);
+            }
+            else
+            {
+                Destroy(gameObject); // Avoid duplicates
             }
 
-            Instance = this;
-            DontDestroyOnLoad(gameObject);
-
-            LoadCurrentLevel();
+            LoadLevel();
         }
+        
+        void LoadLevel()
+    {
+        CurrentLevel = PlayerPrefs.GetInt("currentLevel", 1);
+    }
 
         private void LoadCurrentLevel()
         {
