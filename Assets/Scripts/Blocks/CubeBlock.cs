@@ -1,33 +1,34 @@
+using Managers;
 using UnityEngine;
 
 namespace Blocks
 {
     public class CubeBlock : MonoBehaviour
     {
-        public Vector2Int GridPos { get; set; }
-        public BlockColor ColorType;
+        public BlockColor color;
+        public Vector2Int gridPosition;
 
-        private SpriteRenderer spriteRenderer;
+        private GridManager gridManager;
 
-        public void Initialize(BlockColor color, Vector2Int gridPos)
+        private void Start()
         {
-            ColorType = color;
-            GridPos = gridPos;
-            spriteRenderer = GetComponent<SpriteRenderer>();
-            SetColorSprite();
+            gridManager = FindObjectOfType<GridManager>();
         }
 
-        private void SetColorSprite()
+        public void Initialize(BlockColor color, Vector2Int pos)
         {
-            string spritePath = $"Cubes/DefaultState/{ColorType.ToString().ToLower()}";
-            Sprite sprite = Resources.Load<Sprite>(spritePath);
-            if (sprite != null)
+            this.color = color;
+            this.gridPosition = pos;
+
+            SpriteRenderer sr = GetComponent<SpriteRenderer>();
+            sr.sprite = Resources.Load<Sprite>($"Cubes/DefaultState/{color.ToString().ToLower()}");
+        }
+
+        private void OnMouseDown()
+        {
+            if (gridManager != null)
             {
-                spriteRenderer.sprite = sprite;
-            }
-            else
-            {
-                Debug.LogError($"Missing sprite at path: Resources/{spritePath}.png");
+                gridManager.TryBlastGroupAt(gridPosition);
             }
         }
     }

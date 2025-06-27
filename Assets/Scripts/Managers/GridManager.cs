@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using System.Collections.Generic;
 using Blocks;
@@ -21,6 +22,10 @@ namespace Managers
         
         [SerializeField] private float blockSize = 1.2f;
         [SerializeField] private Vector2 backgroundPadding = new Vector2(1f, 1f);
+        
+        private CubeBlock[,] cubes;
+        private Vector3 gridOffset;
+
 
         void Start()
         {
@@ -45,12 +50,14 @@ namespace Managers
             LevelData data = levelLoader.levelData;
             width = data.grid_width;
             height = data.grid_height;
+            
+            cubes = new CubeBlock[width, height];
 
             gridRoot = new GameObject("GridRoot").transform;
             grid = new CubeBlock[width, height];
 
             // Calculate grid offset for centering
-            Vector3 gridOffset = new Vector3(-(width - 1) * blockSize / 2f, -(height - 1) * blockSize / 2f, 0);
+            gridOffset = new Vector3(-(width - 1) * blockSize / 2f, -(height - 1) * blockSize / 2f, 0);
 
             for (int i = 0; i < data.grid.Count; i++)
             {
@@ -112,6 +119,7 @@ namespace Managers
             CubeBlock cube = obj.GetComponent<CubeBlock>();
             cube.Initialize(color, gridPos);
             grid[gridPos.x, gridPos.y] = cube;
+            cubes[gridPos.x, gridPos.y] = cube;
         }
         
         private void CreateObstacle(string typeCode, Vector2Int gridPos, Vector3 worldPos)
@@ -172,5 +180,157 @@ namespace Managers
                 _ => BlockColor.Red
             };
         }
+        
+        public void TryBlastGroupAt(Vector2Int origin)
+        {
+            CubeBlock startBlock = GetCubeAt(origin);
+            if (startBlock == null) return;
+
+            List<CubeBlock> group = FindConnectedCubes(startBlock);
+            if (group.Count < 2) return;
+
+            // Spend move here if needed
+
+            StartCoroutine(BlastCubes(group));
+        }
+        
+        private List<CubeBlock> FindConnectedCubes(CubeBlock start)
+        {
+            List<CubeBlock> result = new List<CubeBlock>();
+            HashSet<Vector2Int> visited = new HashSet<Vector2Int>();
+            Queue<CubeBlock> queue = new Queue<CubeBlock>();
+    
+            queue.Enqueue(start);
+            visited.Add(start.gridPosition);
+
+            while (queue.Count > 0)
+            {
+                CubeBlock current = queue.Dequeue();
+                result.Add(current);
+
+                foreach (Vector2Int dir in directions)
+                {
+                    Vector2Int neighborPos = current.gridPosition + dir;
+
+                    if (IsInBounds(neighborPos) && !visited.Contains(neighborPos))
+                    {
+                        CubeBlock neighbor = GetCubeAt(neighborPos);
+                        if (neighbor != null && neighbor.color == start.color)
+                        {
+                            queue.Enqueue(neighbor);
+                            visited.Add(neighborPos);
+                        }
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        private readonly List<Vector2Int> directions = new List<Vector2Int>
+        {
+            Vector2Int.up,
+            Vector2Int.down,
+            Vector2Int.left,
+            Vector2Int.right
+        };
+        
+        private void DropCubes()
+        {
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 1; y < height; y++)
+                {
+                    if (cubes[x, y] != null && cubes[x, y - 1] == null)
+                    {
+                        int dropY = y;
+                        while (dropY > 0 && cubes[x, dropY - 1] == null)
+                        {
+                            dropY--;
+                        }
+
+                        CubeBlock block = cubes[x, y];
+                        cubes[x, dropY] = block;
+                        cubes[x, y] = null;
+
+                        block.gridPosition = new Vector2Int(x, dropY);
+                        block.transform.position = GetWorldPosition(x, dropY);
+                    }
+                }
+            }
+        }
+        
+        private void FillEmptySpaces()
+        {
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    if (cubes[x, y] == null)
+                    {
+                        BlockColor randomColor = GetRandomColorEnum();
+                        Vector2Int pos = new Vector2Int(x, y);
+                        Vector3 spawnPos = GetWorldPosition(x, height + 2); // spawn above
+                        Vector3 finalPos = GetWorldPosition(x, y);
+
+                        GameObject obj = Instantiate(cubePrefab, spawnPos, Quaternion.identity, gridRoot);
+                        CubeBlock newCube = obj.GetComponent<CubeBlock>();
+                        newCube.Initialize(randomColor, pos);
+                        cubes[x, y] = newCube;
+
+                        newCube.transform.position = finalPos; // For now instant fall. Animate later.
+                    }
+                }
+            }
+        }
+        
+        private CubeBlock GetCubeAt(Vector2Int pos)
+        {
+            if (!IsInBounds(pos)) return null;
+            return cubes[pos.x, pos.y];
+        }
+
+        private bool IsInBounds(Vector2Int pos)
+        {
+            return pos.x >= 0 && pos.x < width && pos.y >= 0 && pos.y < height;
+        }
+
+        private Vector3 GetWorldPosition(int x, int y)
+        {
+            return new Vector3(x * blockSize, y * blockSize, 0) + gridOffset;
+        }
+        
+        private BlockColor GetRandomColorEnum()
+        {
+            int value = Random.Range(0, 4);
+            return (BlockColor)value; // Enum: 0=Red, 1=Green, 2=Blue, 3=Yellow
+        }
+        
+        private IEnumerator BlastCubes(List<CubeBlock> group)
+        {
+            foreach (var block in group)
+            {
+                string colorName = block.color.ToString().ToLower(); // red, blue, etc.
+                Sprite particleSprite = Resources.Load<Sprite>($"Cubes/Particles/particle_{colorName}");
+
+                GameObject particleObj = new GameObject("ParticleEffect");
+                particleObj.transform.position = block.transform.position;
+
+                SpriteRenderer sr = particleObj.AddComponent<SpriteRenderer>();
+                sr.sprite = particleSprite;
+                sr.sortingOrder = 5;
+
+                Destroy(particleObj, 0.5f); // Remove particle after 0.5 second
+
+                Destroy(block.gameObject); // Destroy block
+                cubes[block.gridPosition.x, block.gridPosition.y] = null;
+            }
+
+            yield return new WaitForSeconds(1f); // Delay before falling & filling
+
+            DropCubes();
+            FillEmptySpaces();
+        }
+
     }
 }
