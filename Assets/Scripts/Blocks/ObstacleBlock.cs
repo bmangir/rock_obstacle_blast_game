@@ -7,29 +7,67 @@ namespace Blocks
         private SpriteRenderer spriteRenderer;
 
         public ObstacleType obstacleType;
+        public Vector2Int gridPosition;
+        private int health;
 
         private void Awake()
         {
             spriteRenderer = GetComponent<SpriteRenderer>();
         }
 
-        public void Initialize(ObstacleType type)
+        /*
+         * Initialize health of obstacles and images
+         */
+        public void Initialize(ObstacleType type, Vector2Int pos)
         {
             this.obstacleType = type;
+            gridPosition = pos;
 
-            string path = type switch
+            switch (type)
             {
-                ObstacleType.Box => "Obstacles/Box/box",
-                ObstacleType.Stone => "Obstacles/Stone/stone",
-                ObstacleType.Vase => "Obstacles/Vase/vase_01", // Or random vase_01 / vase_02 later
-                _ => ""
-            };
+                case ObstacleType.Box:
+                    health = 1;
+                    spriteRenderer.sprite = Resources.Load<Sprite>("Obstacles/Box/box");
+                    break;
+                case ObstacleType.Stone:
+                    health = 1;
+                    spriteRenderer.sprite = Resources.Load<Sprite>("Obstacles/Stone/stone");
+                    break;
+                case ObstacleType.Vase:
+                    health = 2;
+                    spriteRenderer.sprite = Resources.Load<Sprite>("Obstacles/Vase/vase_01");
+                    break;
+            }
+        }
+        
+        /*
+         * Apply damages to destroy obstacles
+         */
+        public bool ApplyBlastDamage()
+        {
+            if (obstacleType == ObstacleType.Stone)
+                return false; // not damaged by cube blast
 
-            Sprite sprite = Resources.Load<Sprite>(path);
-            if (sprite != null)
-                spriteRenderer.sprite = sprite;
-            else
-                Debug.LogError($"Missing obstacle sprite at path: {path}.png");
+            health--;
+
+            // Change view of vase when it is gotten 1 hit
+            if (obstacleType == ObstacleType.Vase && health == 1)
+            {
+                spriteRenderer.sprite = Resources.Load<Sprite>("Obstacles/Vase/vase_02");
+            }
+
+            if (health <= 0)
+            {
+                Destroy(gameObject);
+                return true;
+            }
+
+            return false;
+        }
+        
+        public bool CanFall()
+        {
+            return obstacleType == ObstacleType.Vase;
         }
     }
 }
