@@ -3,7 +3,6 @@ using UnityEngine;
 using System.Collections.Generic;
 using Blocks;
 using Data;
-using Managers;
 
 namespace Managers
 {
@@ -24,6 +23,8 @@ namespace Managers
         [SerializeField] private Vector2 backgroundPadding = new Vector2(1f, 1f);
         
         private CubeBlock[,] cubes;
+        private ObstacleBlock[,] obstacles;
+        
         private Vector3 gridOffset;
 
 
@@ -52,6 +53,7 @@ namespace Managers
             height = data.grid_height;
             
             cubes = new CubeBlock[width, height];
+            obstacles = new ObstacleBlock[width, height];
 
             gridRoot = new GameObject("GridRoot").transform;
             grid = new CubeBlock[width, height];
@@ -69,6 +71,7 @@ namespace Managers
 
                 string type = data.grid[i] == "rand" ? GetRandomColorCode() : data.grid[i];
 
+                // Check if it is obstacle, rocket or cube
                 if (type == "bo" || type == "s" || type == "v")
                 {
                     CreateObstacle(type, pos, worldPos);
@@ -89,6 +92,7 @@ namespace Managers
         
         void CreateGridBackground()
         {
+            // TODO: fit the matrix shape and size later
             Sprite bgSprite = Resources.Load<Sprite>("UI/Gameplay/grid_background");
             if (bgSprite == null)
             {
@@ -109,7 +113,7 @@ namespace Managers
                 1f
             );
 
-            bgObj.transform.position = new Vector3(0, 0, 1); // behind blocks, in front of background
+            bgObj.transform.position = new Vector3(0, 0, 1); // put it behind of blocks
         }
 
 
@@ -122,26 +126,17 @@ namespace Managers
             cubes[gridPos.x, gridPos.y] = cube;
         }
         
-        private void CreateObstacle(string typeCode, Vector2Int gridPos, Vector3 worldPos)
+        private void CreateObstacle(string code, Vector2Int pos, Vector3 worldPos)
         {
-            GameObject obj = Instantiate(obstaclePrefab, worldPos, Quaternion.identity, gridRoot);
-            ObstacleBlock block = obj.GetComponent<ObstacleBlock>();
+            GameObject prefab = obstaclePrefab;
+            GameObject obj = Instantiate(prefab, worldPos, Quaternion.identity, gridRoot);
+            ObstacleBlock obstacle = obj.GetComponent<ObstacleBlock>();
 
-            if (block == null)
-            {
-                Debug.LogError("Missing ObstacleBlock script on prefab");
-                return;
-            }
+            if (code == "bo") obstacle.Initialize(ObstacleType.Box, pos);
+            else if (code == "s") obstacle.Initialize(ObstacleType.Stone, pos);
+            else if (code == "v") obstacle.Initialize(ObstacleType.Vase, pos);
 
-            ObstacleType obstacleType = typeCode switch
-            {
-                "bo" => ObstacleType.Box,
-                "s" => ObstacleType.Stone,
-                "v" => ObstacleType.Vase,
-                _ => ObstacleType.Box
-            };
-
-            block.Initialize(obstacleType);
+            obstacles[pos.x, pos.y] = obstacle;
         }
         
         private void CreateRocket(string typeCode, Vector2Int gridPos, Vector3 worldPos)
@@ -227,6 +222,7 @@ namespace Managers
             return result;
         }
 
+        // TODO: for rocket directions (rocket gameplay implement)
         private readonly List<Vector2Int> directions = new List<Vector2Int>
         {
             Vector2Int.up,
@@ -241,36 +237,71 @@ namespace Managers
             {
                 for (int y = 1; y < height; y++)
                 {
-                    if (cubes[x, y] != null && cubes[x, y - 1] == null)
+                    if (cubes[x, y] is not null)
                     {
                         int dropY = y;
-                        while (dropY > 0 && cubes[x, dropY - 1] == null)
+                        while (dropY > 0)
                         {
-                            dropY--;
+                            if (obstacles[x, dropY - 1] is not null) break; // If there is an obstacle, stop
+                            if (cubes[x, dropY - 1] is null)
+                                dropY--;
+                            else
+                                break;
                         }
 
-                        CubeBlock block = cubes[x, y];
-                        cubes[x, dropY] = block;
-                        cubes[x, y] = null;
+                        if (dropY != y)
+                        {
+                            CubeBlock block = cubes[x, y];
+                            cubes[x, dropY] = block;
+                            cubes[x, y] = null;
 
-                        block.gridPosition = new Vector2Int(x, dropY);
-                        block.transform.position = GetWorldPosition(x, dropY);
+                            block.gridPosition = new Vector2Int(x, dropY);
+                            block.transform.position = GetWorldPosition(x, dropY);
+                        }
                     }
                 }
             }
         }
         
+        private void DropObstacles()
+        {
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 1; y < height; y++)
+                {
+                    ObstacleBlock obs = obstacles[x, y];
+                    if (obs is not null && obs.CanFall() && obstacles[x, y - 1] is null && cubes[x, y - 1] is null)
+                    {
+                        int dropY = y;
+                        while (dropY > 0 && obstacles[x, dropY - 1] is null && cubes[x, dropY - 1] is null)
+                            dropY--;
+
+                        obstacles[x, dropY] = obs;
+                        obstacles[x, y] = null;
+
+                        obs.gridPosition = new Vector2Int(x, dropY);
+                        obs.transform.position = GetWorldPosition(x, dropY);
+                    }
+                }
+            }
+        }
+
+        
         private void FillEmptySpaces()
         {
             for (int x = 0; x < width; x++)
             {
-                for (int y = 0; y < height; y++)
+                int spawnY = height;
+
+                for (int y = height - 1; y >= 0; y--)
                 {
-                    if (cubes[x, y] == null)
+                    // Condition to check is there is an empty cell where is no any obstacle under it
+                    if (cubes[x, y] is null && obstacles[x, y] is null)
                     {
+                        // Create the cube to fall down
                         BlockColor randomColor = GetRandomColorEnum();
                         Vector2Int pos = new Vector2Int(x, y);
-                        Vector3 spawnPos = GetWorldPosition(x, height + 2); // spawn above
+                        Vector3 spawnPos = GetWorldPosition(x, spawnY); // spawn above
                         Vector3 finalPos = GetWorldPosition(x, y);
 
                         GameObject obj = Instantiate(cubePrefab, spawnPos, Quaternion.identity, gridRoot);
@@ -278,11 +309,75 @@ namespace Managers
                         newCube.Initialize(randomColor, pos);
                         cubes[x, y] = newCube;
 
-                        newCube.transform.position = finalPos; // For now instant fall. Animate later.
+                        newCube.transform.position = finalPos;
+
+                        spawnY++; // jump to up of the cell to fall new blocks
+                    }
+                    else if (obstacles[x, y] is not null || cubes[x, y] is not null)
+                    {
+                        // If there is a cube or an obstacle, +1 spawn position on y-axis
+                        spawnY = y + 1;
                     }
                 }
             }
         }
+        
+        private IEnumerator BlastCubes(List<CubeBlock> group)
+        {
+            HashSet<Vector2Int> affectedObstaclePositions = new HashSet<Vector2Int>();
+            
+            foreach (var block in group)
+            {
+                string colorName = block.color.ToString().ToLower();
+                Sprite particleSprite = Resources.Load<Sprite>($"Cubes/Particles/particle_{colorName}");
+
+                GameObject particleObj = new GameObject("ParticleEffect");
+                particleObj.transform.position = block.transform.position;
+
+                SpriteRenderer sr = particleObj.AddComponent<SpriteRenderer>();
+                sr.sprite = particleSprite;
+                sr.sortingOrder = 5;
+
+                Destroy(particleObj, 1f);
+
+                // Clear from grid
+                cubes[block.gridPosition.x, block.gridPosition.y] = null;
+                Destroy(block.gameObject);
+
+                // Check neighbors
+                foreach (Vector2Int dir in directions)
+                {
+                    Vector2Int neighborPos = block.gridPosition + dir;
+                    if (IsInBounds(neighborPos))
+                    {
+                        ObstacleBlock obs = obstacles[neighborPos.x, neighborPos.y];
+                        if (obs is not null)
+                        {
+                            bool destroyed = obs.ApplyBlastDamage();
+                            if (destroyed)
+                                affectedObstaclePositions.Add(neighborPos);
+                        }
+                    }
+                }
+            }
+            
+            yield return new WaitForSeconds(0.4f);
+
+            // Clear destroyed obstacles from grid
+            foreach (var pos in affectedObstaclePositions)
+            {
+                obstacles[pos.x, pos.y] = null;
+            }
+
+            // Drop cubes and obstacles(vase) & refill the grid
+            DropObstacles();
+            DropCubes();
+            FillEmptySpaces();
+        }
+
+        /*
+         * UTILITY FUNCTIONS
+         */
         
         private CubeBlock GetCubeAt(Vector2Int pos)
         {
@@ -305,32 +400,5 @@ namespace Managers
             int value = Random.Range(0, 4);
             return (BlockColor)value; // Enum: 0=Red, 1=Green, 2=Blue, 3=Yellow
         }
-        
-        private IEnumerator BlastCubes(List<CubeBlock> group)
-        {
-            foreach (var block in group)
-            {
-                string colorName = block.color.ToString().ToLower(); // red, blue, etc.
-                Sprite particleSprite = Resources.Load<Sprite>($"Cubes/Particles/particle_{colorName}");
-
-                GameObject particleObj = new GameObject("ParticleEffect");
-                particleObj.transform.position = block.transform.position;
-
-                SpriteRenderer sr = particleObj.AddComponent<SpriteRenderer>();
-                sr.sprite = particleSprite;
-                sr.sortingOrder = 5;
-
-                Destroy(particleObj, 0.5f); // Remove particle after 0.5 second
-
-                Destroy(block.gameObject); // Destroy block
-                cubes[block.gridPosition.x, block.gridPosition.y] = null;
-            }
-
-            yield return new WaitForSeconds(1f); // Delay before falling & filling
-
-            DropCubes();
-            FillEmptySpaces();
-        }
-
     }
 }
