@@ -69,5 +69,35 @@ namespace Blocks
         {
             return obstacleType == ObstacleType.Vase;
         }
+        
+        public bool ApplyRocketDamage()
+        {
+            switch (obstacleType)
+            {
+                case ObstacleType.Box:
+                    Destroy(gameObject);
+                    return true;
+                    
+                case ObstacleType.Stone:
+                    Destroy(gameObject);
+                    return true;
+                    
+                case ObstacleType.Vase:
+                    health--;
+                    if (health == 1)
+                    {
+                        spriteRenderer.sprite = Resources.Load<Sprite>("Obstacles/Vase/vase_02");
+                    }
+                    else if (health <= 0)
+                    {
+                        Destroy(gameObject);
+                        return true;
+                    }
+                    return false;
+                    
+                default:
+                    return false;
+            }
+        }
     }
 }
