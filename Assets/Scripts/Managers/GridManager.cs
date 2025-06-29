@@ -29,13 +29,22 @@ namespace Managers
         private bool isProcessingMoves = false;
         
         private Vector3 gridOffset;
+        
+        private bool isInitialized = false;
 
 
         void Start()
         {
             InitGrid();
             AdjustCameraToFitGrid();
+            StartCoroutine(ShowInitialHints());
+        }
+        
+        private IEnumerator ShowInitialHints()
+        {
+            yield return null; // Wait for initialization to complete
             ShowAllRocketHints();
+            isInitialized = true;
         }
         
         void AdjustCameraToFitGrid()
@@ -353,6 +362,13 @@ namespace Managers
                     }
                 }
             }
+            StartCoroutine(DelayedHintUpdate());
+        }
+        
+        private IEnumerator DelayedHintUpdate()
+        {
+            yield return new WaitForSeconds(0.2f); // Match falling duration
+            ShowAllRocketHints();
         }
         
         private IEnumerator BlastCubes(List<CubeBlock> group, Vector2Int origin)
@@ -412,8 +428,7 @@ namespace Managers
             DropRockets();
             DropCubes();
             FillEmptySpaces();
-    
-            ShowAllRocketHints();
+            
             isProcessingMoves = false;
         }
         
@@ -507,7 +522,6 @@ namespace Managers
             DropCubes();
             FillEmptySpaces();
             
-            ShowAllRocketHints();
             isProcessingMoves = false;
         }
         
@@ -587,7 +601,6 @@ namespace Managers
             }
 
             // Find and show eligible groups
-            // TODO: process with fill the empty cells from above and initialization first grid 
             HashSet<CubeBlock> processed = new HashSet<CubeBlock>();
             
             for (int x = 0; x < width; x++)
@@ -595,16 +608,14 @@ namespace Managers
                 for (int y = 0; y < height; y++)
                 {
                     CubeBlock cube = cubes[x, y];
-                    if (cube is not null && !processed.Contains(cube))
+                    if (cube is null || processed.Contains(cube)) continue;
+                    List<CubeBlock> group = FindConnectedCubes(cube);
+                    if (group.Count >= 4)
                     {
-                        List<CubeBlock> group = FindConnectedCubes(cube);
-                        if (group.Count >= 4)
+                        foreach (CubeBlock block in group)
                         {
-                            foreach (CubeBlock block in group)
-                            {
-                                block.ShowRocketHint();
-                                processed.Add(block);
-                            }
+                            block.ShowRocketHint();
+                            processed.Add(block);
                         }
                     }
                 }
