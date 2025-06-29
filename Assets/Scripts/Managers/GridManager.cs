@@ -483,33 +483,45 @@ namespace Managers
                 if (rocket.direction == RocketDirection.Horizontal)
                 {
                     // Left direction
-                    for (int x = rocket.gridPosition.x; x >= 0; x--)
+                    if (rocket.blastLeft)
                     {
-                        if (!DamageCell(new Vector2Int(x, rocket.gridPosition.y), false))
-                            break;
+                        for (int x = rocket.gridPosition.x; x >= 0; x--)
+                        {
+                            if (!DamageCell(new Vector2Int(x, rocket.gridPosition.y), false))
+                                break;
+                        }
                     }
-                    
+            
                     // Right direction
-                    for (int x = rocket.gridPosition.x + 1; x < width; x++)
+                    if (rocket.blastRight)
                     {
-                        if (!DamageCell(new Vector2Int(x, rocket.gridPosition.y), false))
-                            break;
+                        for (int x = rocket.gridPosition.x + 1; x < width; x++)
+                        {
+                            if (!DamageCell(new Vector2Int(x, rocket.gridPosition.y), false))
+                                break;
+                        }
                     }
                 }
                 else
                 {
                     // Down direction
-                    for (int y = rocket.gridPosition.y; y >= 0; y--)
+                    if (rocket.blastDown)
                     {
-                        if (!DamageCell(new Vector2Int(rocket.gridPosition.x, y), false))
-                            break;
+                        for (int y = rocket.gridPosition.y; y >= 0; y--)
+                        {
+                            if (!DamageCell(new Vector2Int(rocket.gridPosition.x, y), false))
+                                break;
+                        }
                     }
-                    
+            
                     // Up direction
-                    for (int y = rocket.gridPosition.y + 1; y < height; y++)
+                    if (rocket.blastUp)
                     {
-                        if (!DamageCell(new Vector2Int(rocket.gridPosition.x, y), false))
-                            break;
+                        for (int y = rocket.gridPosition.y + 1; y < height; y++)
+                        {
+                            if (!DamageCell(new Vector2Int(rocket.gridPosition.x, y), false))
+                                break;
+                        }
                     }
                 }
             }
