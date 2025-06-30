@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Linq;
 using UnityEngine;
 using System.Collections.Generic;
 using Blocks;
@@ -31,6 +32,9 @@ namespace Managers
         private Vector3 gridOffset;
         
         private bool isInitialized = false;
+        
+        private GoalPanelManager goalPanelManager;
+        private Dictionary<ObstacleType, int> obstacleGoals = new Dictionary<ObstacleType, int>();
 
 
         void Start()
@@ -50,12 +54,14 @@ namespace Managers
         void AdjustCameraToFitGrid()
         {
             Camera cam = Camera.main;
-
-            float verticalFit = (height + 1) * blockSize / 2f;
+            
+            float topPanelSpace = Screen.height * 0.2f / cam.pixelHeight * cam.orthographicSize * 2;
+    
+            float verticalFit = (height + 1) * blockSize / 2f + topPanelSpace;
             float horizontalFit = (width + 1) * blockSize / 2f / cam.aspect;
-
+    
             cam.orthographicSize = Mathf.Max(verticalFit, horizontalFit);
-            cam.transform.position = new Vector3(0, 0, -10);
+            cam.transform.position = new Vector3(0, -topPanelSpace/2, -10);
         }
 
 
@@ -68,9 +74,15 @@ namespace Managers
             cubes = new CubeBlock[width, height];
             obstacles = new ObstacleBlock[width, height];
             rockets = new RocketBlock[width, height];
+            
+            obstacleGoals[ObstacleType.Box] = 0;
+            obstacleGoals[ObstacleType.Stone] = 0;
+            obstacleGoals[ObstacleType.Vase] = 0;
 
             gridRoot = new GameObject("GridRoot").transform;
             grid = new CubeBlock[width, height];
+            
+            goalPanelManager = FindObjectOfType<GoalPanelManager>();
 
             // Calculate grid offset for centering
             gridOffset = new Vector3(-(width - 1) * blockSize / 2f, -(height - 1) * blockSize / 2f, 0);
@@ -100,8 +112,18 @@ namespace Managers
                     CreateCube(color, pos, worldPos);
                 }
             }
+            InitializeGoalPanel(data);
             
             CreateGridBackground();
+        }
+        
+        private void InitializeGoalPanel(LevelData data)
+        {
+            var nonZeroGoals = obstacleGoals
+                .Where(kvp => kvp.Value > 0)
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+    
+            goalPanelManager.Initialize(nonZeroGoals, data.move_count);
         }
         
         void CreateGridBackground()
@@ -127,7 +149,7 @@ namespace Managers
                 1f
             );
 
-            bgObj.transform.position = new Vector3(0, 0, 1); // put it behind of blocks
+            bgObj.transform.position = new Vector3(0, 0, 10); // put it behind of blocks
         }
 
 
@@ -146,9 +168,21 @@ namespace Managers
             GameObject obj = Instantiate(prefab, worldPos, Quaternion.identity, gridRoot);
             ObstacleBlock obstacle = obj.GetComponent<ObstacleBlock>();
 
-            if (code == "bo") obstacle.Initialize(ObstacleType.Box, pos);
-            else if (code == "s") obstacle.Initialize(ObstacleType.Stone, pos);
-            else if (code == "v") obstacle.Initialize(ObstacleType.Vase, pos);
+            if (code == "bo")
+            {
+                obstacle.Initialize(ObstacleType.Box, pos);
+                obstacleGoals[ObstacleType.Box]++;
+            }
+            else if (code == "s")
+            {
+                obstacle.Initialize(ObstacleType.Stone, pos);
+                obstacleGoals[ObstacleType.Stone]++;
+            }
+            else if (code == "v")
+            {
+                obstacle.Initialize(ObstacleType.Vase, pos);
+                obstacleGoals[ObstacleType.Vase]++;
+            }
 
             obstacles[pos.x, pos.y] = obstacle;
         }
@@ -197,7 +231,7 @@ namespace Managers
             List<CubeBlock> group = FindConnectedCubes(startBlock);
             if (group.Count < 2) return;
             
-            // TODO: Spend move here if needed
+            goalPanelManager.DecrementMove();
 
             isProcessingMoves = true;
             StartCoroutine(BlastCubes(group, origin));
@@ -404,7 +438,10 @@ namespace Managers
                         {
                             bool destroyed = obs.ApplyBlastDamage();
                             if (destroyed)
+                            {
+                                goalPanelManager.DecrementObstacle(obs.obstacleType);
                                 affectedObstaclePositions.Add(neighborPos);
+                            }
                         }
                     }
                 }
@@ -438,6 +475,8 @@ namespace Managers
             
             RocketBlock rocket = rockets[rocketPos.x, rocketPos.y];
             if (rocket == null) return;
+            
+            goalPanelManager.DecrementMove();
 
             isProcessingMoves = true;
             StartCoroutine(ExplodeRocket(rocket));
@@ -455,7 +494,7 @@ namespace Managers
             if (isCombo)
             {
                 // Combo explosion: 3x3 area
-                // TODO: ask if the chain reaction of rocket apply the vertical and horizontal blasts by the dir of rockets
+                // TODO: make animation
                 for (int x = -1; x <= 1; x++)
                 {
                     for (int y = -1; y <= 1; y++)
@@ -555,6 +594,7 @@ namespace Managers
                 if (destroyed)
                 {
                     obstacles[pos.x, pos.y] = null;
+                    goalPanelManager.DecrementObstacle(obs.obstacleType);
                 }
                 
                 // Stone stops rockets

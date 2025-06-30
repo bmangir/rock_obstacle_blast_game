@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Managers
 {
@@ -40,6 +41,20 @@ namespace Managers
         public bool AllLevelsFinished()
         {
             return CurrentLevel > MaxLevel;
+        }
+        
+        // TODO: The next 2 functions will be implement in the ResultScene and Manager
+        public void LoadNextLevel()
+        {
+            CurrentLevel = Mathf.Clamp(CurrentLevel + 1, 1, MaxLevel);
+            PlayerPrefs.SetInt(LastPlayedLevelKey, CurrentLevel);
+            PlayerPrefs.Save();
+            SceneManager.LoadScene("LevelScene"); // TODO: Load ResultScene later
+        }
+
+        public void ReloadCurrentLevel()
+        {
+            SceneManager.LoadScene("LevelScene"); // TODO: Load ResultScene latter
         }
 
 #if UNITY_EDITOR
