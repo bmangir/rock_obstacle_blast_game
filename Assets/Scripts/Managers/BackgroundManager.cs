@@ -27,7 +27,7 @@ namespace Managers
         {
             Camera cam = Camera.main;
 
-            float screenHeight = 3.25f * cam.orthographicSize;
+            float screenHeight = 2f * cam.orthographicSize;
             float screenWidth = screenHeight * cam.aspect;
 
             float spriteHeight = sr.sprite.bounds.size.y;
