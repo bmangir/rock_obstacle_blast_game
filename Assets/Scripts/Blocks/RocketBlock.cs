@@ -67,28 +67,6 @@ namespace Blocks
             }
         }
         
-        private string GetRandomRocketVariant(RocketDirection dir)
-        {
-            if (dir == RocketDirection.Horizontal)
-            {
-                int rnd = Random.Range(0, 3);
-                return rnd switch {
-                    0 => "horizontal_rocket",
-                    1 => "horizontal_rocket_part_left",
-                    _ => "horizontal_rocket_part_right"
-                };
-            }
-            else
-            {
-                int rnd = Random.Range(0, 3);
-                return rnd switch {
-                    0 => "vertical_rocket",
-                    1 => "vertical_rocket_part_bottom",
-                    _ => "vertical_rocket_part_top"
-                };
-            }
-        }
-        
         private void OnMouseDown()
         {
             if (gridManager == null)
