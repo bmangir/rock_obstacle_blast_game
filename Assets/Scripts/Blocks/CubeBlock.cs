@@ -23,6 +23,13 @@ namespace Blocks
 
             SpriteRenderer sr = GetComponent<SpriteRenderer>();
             sr.sprite = Resources.Load<Sprite>($"Cubes/DefaultState/{color.ToString().ToLower()}");
+            
+            BoxCollider2D collider = GetComponent<BoxCollider2D>();
+            if (collider is not null)
+            {
+                collider.size = sr.sprite.bounds.size;
+                collider.offset = Vector2.zero;
+            }
         }
         
         private void CreateRocketHint()
@@ -51,6 +58,7 @@ namespace Blocks
 
         private void OnMouseDown()
         {
+            Debug.Log("OnMouseDown");
             if (gridManager != null)
             {
                 gridManager.TryBlastGroupAt(gridPosition);
