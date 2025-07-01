@@ -3,7 +3,6 @@ using TMPro;
 using UnityEngine.UI;
 using System.Collections.Generic;
 using Blocks;
-using UnityEngine.SceneManagement;
 
 namespace Managers
 {
@@ -110,11 +109,35 @@ namespace Managers
             // Only win if ALL obstacles are cleared
             if (allGoalsComplete && GetRemainingObstacles() == 0)
             {
-                LevelManager.Instance.LoadNextLevel();
+                StartCoroutine(DelayedWinScreen());
             }
             else if (remainingMoves <= 0)
             {
-                LevelManager.Instance.ReloadCurrentLevel();
+                StartCoroutine(DelayedLoseScreen());
+            }
+        }
+        
+        private System.Collections.IEnumerator DelayedWinScreen()
+        {
+            // Wait for all animations to complete
+            yield return new WaitForSeconds(1.5f);
+            
+            GameResultManager resultManager = FindObjectOfType<GameResultManager>();
+            if (resultManager is not null)
+            {
+                resultManager.ShowWinScreen();
+            }
+        }
+        
+        private System.Collections.IEnumerator DelayedLoseScreen()
+        {
+            // Wait for all animations to complete
+            yield return new WaitForSeconds(1.5f);
+            
+            GameResultManager resultManager = FindObjectOfType<GameResultManager>();
+            if (resultManager is not null)
+            {
+                resultManager.ShowLoseScreen();
             }
         }
     }
