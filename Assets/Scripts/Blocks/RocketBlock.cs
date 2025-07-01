@@ -9,11 +9,6 @@ namespace Blocks
         public RocketDirection direction;
         private GridManager gridManager;
         public Vector2Int gridPosition;
-        
-        public bool blastLeft;
-        public bool blastRight;
-        public bool blastUp;
-        public bool blastDown;
 
         private void Awake()
         {
@@ -57,55 +52,10 @@ namespace Blocks
             LoadRocketSprite(dir);
         }
         
-        private void SetBlastDirections(string variant)
-        {
-            // Reset all directions
-            blastLeft = false;
-            blastRight = false;
-            blastUp = false;
-            blastDown = false;
-
-            if (direction == RocketDirection.Horizontal)
-            {
-                if (variant == "horizontal_rocket")
-                {
-                    blastLeft = true;
-                    blastRight = true;
-                }
-                else if (variant == "horizontal_rocket_part_left")
-                {
-                    blastLeft = true;
-                }
-                else if (variant == "horizontal_rocket_part_right")
-                {
-                    blastRight = true;
-                }
-            }
-            else // Vertical
-            {
-                if (variant == "vertical_rocket")
-                {
-                    blastUp = true;
-                    blastDown = true;
-                }
-                else if (variant == "vertical_rocket_part_bottom")
-                {
-                    blastDown = true;
-                }
-                else if (variant == "vertical_rocket_part_top")
-                {
-                    blastUp = true;
-                }
-            }
-        }
-        
         private void LoadRocketSprite(RocketDirection dir)
         {
-            string variant = GetRandomRocketVariant(dir);
+            string variant = dir == RocketDirection.Horizontal ? "horizontal_rocket" : "vertical_rocket";
             string path = $"Rocket/{variant}";
-            
-            SetBlastDirections(variant);
-            
             Sprite sprite = Resources.Load<Sprite>(path);
             if (sprite is not null)
             {
@@ -113,7 +63,7 @@ namespace Blocks
             }
             else
             {
-                Debug.LogError($"Level rocket sprite not found: {path}");
+                Debug.LogError($"Rocket sprite not found at {path}");
             }
         }
         
