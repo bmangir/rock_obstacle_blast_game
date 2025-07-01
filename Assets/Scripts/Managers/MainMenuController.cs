@@ -12,9 +12,10 @@ namespace Managers
 
         private void Start()
         {
+            levelButton.interactable = true;
             if (LevelManager.Instance.AllLevelsFinished())
             {
-                levelButtonText.text = "Finished";
+                levelButtonText.text = "All Finished";
                 levelButton.interactable = false;
             }
             else
@@ -27,7 +28,7 @@ namespace Managers
 
         private void OnLevelButtonClicked()
         {
-            SceneManager.LoadScene("LevelScene");
+            SceneManager.LoadScene("LevelScene", LoadSceneMode.Single);
         }
     }
 }
