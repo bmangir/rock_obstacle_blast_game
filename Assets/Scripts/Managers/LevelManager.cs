@@ -17,18 +17,18 @@ namespace Managers
             {
                 Instance = this;
                 DontDestroyOnLoad(gameObject);
+                LoadCurrentLevel();
             }
             else
             {
                 Destroy(gameObject); // Avoid duplicates
             }
-
-            LoadCurrentLevel();
         }
 
         private void LoadCurrentLevel()
         {
             CurrentLevel = PlayerPrefs.GetInt(LastPlayedLevelKey, 1);
+            Debug.Log($"Current level: {CurrentLevel}");
         }
 
         public void SetCurrentLevel(int level)
@@ -43,18 +43,9 @@ namespace Managers
             return CurrentLevel > MaxLevel;
         }
         
-        // TODO: The next 2 functions will be implement in the ResultScene and Manager
-        public void LoadNextLevel()
+        public bool IsLastLevel()
         {
-            CurrentLevel = Mathf.Clamp(CurrentLevel + 1, 1, MaxLevel);
-            PlayerPrefs.SetInt(LastPlayedLevelKey, CurrentLevel);
-            PlayerPrefs.Save();
-            SceneManager.LoadScene("LevelScene"); // TODO: Load ResultScene later
-        }
-
-        public void ReloadCurrentLevel()
-        {
-            SceneManager.LoadScene("LevelScene"); // TODO: Load ResultScene latter
+            return CurrentLevel == MaxLevel;
         }
 
 #if UNITY_EDITOR
@@ -63,12 +54,20 @@ namespace Managers
 
         [UnityEditor.MenuItem("BlastGame/Set Last Played Level/Level 10")]
         public static void SetLevel10() => SetLevelFromEditor(10);
+        
+        [UnityEditor.MenuItem("BlastGame/Set Last Played Level/All Levels Complete")]
+        public static void SetAllComplete() => SetLevelFromEditor(11);
 
         private static void SetLevelFromEditor(int level)
         {
             PlayerPrefs.SetInt(LastPlayedLevelKey, level);
             PlayerPrefs.Save();
             Debug.Log($"Set LastPlayedLevel to {level}");
+            
+            if (Instance != null)
+            {
+                Instance.LoadCurrentLevel();
+            }
         }
 #endif
     }
