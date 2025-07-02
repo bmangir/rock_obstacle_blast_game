@@ -12,10 +12,28 @@ namespace Managers
 
         private void Start()
         {
-            levelButton.interactable = true;
+            UpdateLevelButton();
+        }
+        
+        private void OnEnable()
+        {
+            UpdateLevelButton();
+        }
+
+        private void UpdateLevelButton()
+        {
+            if (LevelManager.Instance == null)
+            {
+                Invoke(nameof(UpdateLevelButton), 0.1f);
+                return;
+            }
+            
+            // Clear any existing listeners to prevent duplicates
+            levelButton.onClick.RemoveAllListeners();
+            
             if (LevelManager.Instance.AllLevelsFinished())
             {
-                levelButtonText.text = "All Finished";
+                levelButtonText.text = "Finished!";
                 levelButton.interactable = false;
             }
             else
