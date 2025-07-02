@@ -18,7 +18,8 @@ namespace Managers
         }
 
         [Header("References")]
-        [SerializeField] private TextMeshProUGUI movesText;
+        [SerializeField] private TextMeshProUGUI movesTitle;
+        [SerializeField] private TextMeshProUGUI movesCount;
         [SerializeField] private List<GoalItem> goalItems = new List<GoalItem>();
         
         private Dictionary<ObstacleType, int> goalCounts = new Dictionary<ObstacleType, int>();
@@ -50,8 +51,8 @@ namespace Managers
             if (remainingMoves <= 0) return;
             
             remainingMoves--;
+            
             UpdateMovesDisplay();
-            CheckWinLose();
         }
 
         public void DecrementObstacle(ObstacleType type)
@@ -69,7 +70,6 @@ namespace Managers
                     if (goalCounts[type] == 0)
                     {
                         item.countText.gameObject.SetActive(false);
-                        item.icon.gameObject.SetActive(false);
                         item.checkMark.SetActive(true);
                     }
                     break;
@@ -79,19 +79,10 @@ namespace Managers
             CheckWinLose();
         }
 
-        public int GetRemainingObstacles()
-        {
-            int count = 0;
-            foreach (var goal in goalCounts)
-            {
-                count += goal.Value;
-            }
-            return count;
-        }
-
         private void UpdateMovesDisplay()
         {
-            movesText.text = remainingMoves.ToString();
+            if (movesCount is not null)
+                movesCount.text = remainingMoves.ToString();
         }
 
         private void CheckWinLose()
@@ -106,11 +97,14 @@ namespace Managers
                 }
             }
 
-            // Only win if ALL obstacles are cleared
-            if (allGoalsComplete && GetRemainingObstacles() == 0)
+            // PRIORITY 1: Win condition - if all obstacles are cleared, player wins
+            // This takes precedence over move count (even if remaining moves = 0)
+            // Player can win the level with his/her last move
+            if (allGoalsComplete)
             {
                 StartCoroutine(DelayedWinScreen());
             }
+            // PRIORITY 2: Lose condition - only if goals are not complete and no moves left
             else if (remainingMoves <= 0)
             {
                 StartCoroutine(DelayedLoseScreen());
@@ -139,6 +133,11 @@ namespace Managers
             {
                 resultManager.ShowLoseScreen();
             }
+        }
+        
+        public void CheckWinLoseAfterMove()
+        {
+            CheckWinLose();
         }
     }
 }
