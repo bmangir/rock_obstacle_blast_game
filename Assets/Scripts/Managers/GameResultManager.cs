@@ -34,23 +34,27 @@ namespace Managers
                 continueButton.onClick.AddListener(OnContinueClicked);
                 
             if (returnButton != null)
-                returnButton.onClick.AddListener(OnReturnClicked);
+                returnButton.onClick.AddListener(OnWinReturnClicked);
                 
             if (tryAgainButton != null)
                 tryAgainButton.onClick.AddListener(OnTryAgainClicked);
                 
             if (loseReturnButton != null)
-                loseReturnButton.onClick.AddListener(OnReturnClicked);
+                loseReturnButton.onClick.AddListener(OnLoseReturnClicked);
         }
         
         public void ShowWinScreen()
         {
+            // Show the completed level
+            int completedLevel = LevelManager.Instance.CurrentLevel;
+            bool isLastLevel = LevelManager.Instance.IsLastLevel();
+            
             if (winScreen is not null)
             {
                 winScreen.SetActive(true);
                 
-                // Check if this is the last level (level 10)
-                if (LevelManager.Instance.IsLastLevel())
+                // Check if this was the last level (level 10)
+                if (isLastLevel)
                 {
                     if (winLevelText is not null)
                         winLevelText.text = "You Won All Levels !";
@@ -65,7 +69,7 @@ namespace Managers
                 else
                 {
                     if (winLevelText is not null)
-                        winLevelText.text = $"Level {LevelManager.Instance.CurrentLevel} Complete!";
+                        winLevelText.text = $"Level {completedLevel} Complete!";
                         
                     // Show both buttons for normal levels
                     if (continueButton is not null)
@@ -101,12 +105,14 @@ namespace Managers
         
         private void OnContinueClicked()
         {
-            int nextLevel = LevelManager.Instance.CurrentLevel + 1;
-            LevelManager.Instance.SetCurrentLevel(nextLevel);
+            // Increment level when user clicks Continue
+            if (!LevelManager.Instance.IsLastLevel())
+            {
+                LevelManager.Instance.SetCurrentLevel(LevelManager.Instance.CurrentLevel + 1);
+            }
             
-            // If all levels are completed (level 10 completed),
-            // go to MainScene to show "All Finished"
-            if (nextLevel > LevelManager.Instance.MaxLevel)
+            // Navigate to next level or main scene if all levels completed
+            if (LevelManager.Instance.AllLevelsFinished())
             {
                 SceneManager.LoadScene("MainScene");
             }
@@ -121,7 +127,19 @@ namespace Managers
             SceneManager.LoadScene("LevelScene");
         }
         
-        private void OnReturnClicked()
+        private void OnWinReturnClicked()
+        {
+            // Increment level when user clicks Return from WIN screen
+            // Update the Level Button text in MainScene
+            if (!LevelManager.Instance.IsLastLevel())
+            {
+                LevelManager.Instance.SetCurrentLevel(LevelManager.Instance.CurrentLevel + 1);
+            }
+            
+            SceneManager.LoadScene("MainScene");
+        }
+        
+        private void OnLoseReturnClicked()
         {
             SceneManager.LoadScene("MainScene");
         }
