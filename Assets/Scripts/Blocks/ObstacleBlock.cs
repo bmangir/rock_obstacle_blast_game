@@ -1,4 +1,5 @@
 using UnityEngine;
+using Managers;
 
 namespace Blocks
 {
@@ -58,6 +59,7 @@ namespace Blocks
 
             if (health <= 0)
             {
+                CreateDestroyEffect();
                 Destroy(gameObject);
                 return true;
             }
@@ -70,15 +72,23 @@ namespace Blocks
             return obstacleType == ObstacleType.Vase;
         }
         
+        private void CreateDestroyEffect()
+        {
+            string obstacleTypeString = obstacleType.ToString();
+            ParticleEffectManager.Instance.CreateObstacleDestroyEffect(transform.position, obstacleTypeString);
+        }
+        
         public bool ApplyRocketDamage()
         {
             switch (obstacleType)
             {
                 case ObstacleType.Box:
+                    CreateDestroyEffect();
                     Destroy(gameObject);
                     return true;
                     
                 case ObstacleType.Stone:
+                    CreateDestroyEffect();
                     Destroy(gameObject);
                     return true;
                     
@@ -90,6 +100,7 @@ namespace Blocks
                     }
                     else if (health <= 0)
                     {
+                        CreateDestroyEffect();
                         Destroy(gameObject);
                         return true;
                     }
@@ -98,6 +109,30 @@ namespace Blocks
                 default:
                     return false;
             }
+        }
+        
+        /*
+         * Apply 1-hit damage for adjacent rocket combo 3x3 explosions
+         * This is similar to ApplyBlastDamage but works for all obstacle types
+         */
+        public bool ApplyComboRocketDamage()
+        {
+            health--;
+
+            // Change view of vase when it takes 1 hit
+            if (obstacleType == ObstacleType.Vase && health == 1)
+            {
+                spriteRenderer.sprite = Resources.Load<Sprite>("Obstacles/Vase/vase_02");
+            }
+
+            if (health <= 0)
+            {
+                CreateDestroyEffect();
+                Destroy(gameObject);
+                return true;
+            }
+
+            return false;
         }
     }
 }
