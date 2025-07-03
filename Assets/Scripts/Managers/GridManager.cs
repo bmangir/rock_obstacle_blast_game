@@ -374,7 +374,9 @@ namespace Managers
                             obstacles[x, y] = null;
                             obstacles[x, dropY] = obs;
                             obs.gridPosition = new Vector2Int(x, dropY);
-                            StartCoroutine(AnimateBlockFall(obs.transform, GetWorldPosition(x, dropY)));
+                            
+                            // Use enhanced animation for obstacles with different effects for vase
+                            StartCoroutine(AnimateObstacleFall(obs.transform, GetWorldPosition(x, dropY), obs.obstacleType));
                             somethingDropped = true;
                         }
                     }
@@ -382,6 +384,161 @@ namespace Managers
             }
             
             return somethingDropped;
+        }
+        
+        private IEnumerator AnimateObstacleFall(Transform obstacleTransform, Vector3 targetPosition, ObstacleType obstacleType)
+        {
+            if (obstacleTransform is null) yield break;
+            
+            // Check if already animating to prevent conflicts
+            if (animatingTransforms.Contains(obstacleTransform)) yield break;
+            
+            // Add to tracking set
+            animatingTransforms.Add(obstacleTransform);
+            
+            Vector3 startPosition = obstacleTransform.position;
+            float fallDistance = startPosition.y - targetPosition.y;
+            
+            // Different animation styles based on obstacle type
+            float baseDuration = 0.45f; // Slightly slower than cubes
+            float duration = Mathf.Max(0.25f, baseDuration + (fallDistance * 0.06f));
+            
+            float elapsed = 0f;
+            Vector3 originalScale = obstacleTransform.localScale;
+            
+            // Vases get different animation than other obstacles
+            bool isVase = obstacleType == ObstacleType.Vase;
+            float wobbleIntensity = isVase ? 0.03f : 0.01f; // Vases wobble more
+            float rotationSpeed = isVase ? Random.Range(-90f, 90f) : Random.Range(-45f, 45f);
+            
+            while (elapsed < duration)
+            {
+                if (obstacleTransform == null) 
+                {
+                    animatingTransforms.Remove(obstacleTransform);
+                    yield break;
+                }
+                
+                elapsed += Time.deltaTime;
+                float t = elapsed / duration;
+                
+                // Slightly different easing for obstacles (more realistic weight)
+                float easeT;
+                if (t < 0.6f)
+                {
+                    easeT = t * t * 1.6f; // Heavier acceleration
+                }
+                else
+                {
+                    float bounceT = (t - 0.6f) / 0.4f;
+                    easeT = 0.6f * 0.6f * 1.6f + bounceT * bounceT * 0.4f;
+                }
+                
+                Vector3 currentPos = Vector3.Lerp(startPosition, targetPosition, easeT);
+                
+                // Add wobble effect (vases wobble more as they're fragile)
+                float wobbleOffset = Mathf.Sin(elapsed * 12f) * wobbleIntensity * (1f - t);
+                currentPos.x += wobbleOffset;
+                
+                obstacleTransform.position = currentPos;
+                
+                float scaleEffect = 1f + Mathf.Sin(elapsed * 8f) * 0.03f * (1f - t);
+                obstacleTransform.localScale = originalScale * scaleEffect;
+                
+                // Rotation effect (vases rotate more)
+                float currentRotation = rotationSpeed * elapsed * (1f - t);
+                obstacleTransform.rotation = Quaternion.Euler(0, 0, currentRotation);
+                
+                yield return null;
+            }
+
+            // Landing effect
+            if (obstacleTransform != null)
+            {
+                yield return StartCoroutine(AnimateObstacleLanding(obstacleTransform, targetPosition, originalScale, isVase));
+            }
+            
+            if (animatingTransforms.Contains(obstacleTransform))
+            {
+                animatingTransforms.Remove(obstacleTransform);
+            }
+        }
+        
+        private IEnumerator AnimateObstacleLanding(Transform obstacleTransform, Vector3 targetPosition, Vector3 originalScale, bool isVase)
+        {
+            if (obstacleTransform == null) yield break;
+            
+            float bounceTime = isVase ? 0.2f : 0.12f; // Vases bounce longer
+            float elapsed = 0f;
+            
+            while (elapsed < bounceTime)
+            {
+                if (obstacleTransform == null) yield break;
+                
+                elapsed += Time.deltaTime;
+                float t = elapsed / bounceTime;
+                
+                // Different bounce patterns for different obstacles
+                float bounceIntensity = isVase ? 0.12f : 0.08f;
+                float bounceScale = 1f + Mathf.Sin(t * Mathf.PI) * bounceIntensity;
+                obstacleTransform.localScale = originalScale * bounceScale;
+                
+                // Landing impact
+                float impactOffset = Mathf.Sin(t * Mathf.PI) * (isVase ? 0.025f : 0.015f);
+                obstacleTransform.position = targetPosition + Vector3.down * impactOffset;
+                
+                yield return null;
+            }
+            
+            if (obstacleTransform != null)
+            {
+                obstacleTransform.position = targetPosition;
+                obstacleTransform.localScale = originalScale;
+                obstacleTransform.rotation = Quaternion.identity;
+                
+                StartCoroutine(CreateObstacleLandingEffect(targetPosition, isVase));
+            }
+        }
+        
+        private IEnumerator CreateObstacleLandingEffect(Vector3 position, bool isVase)
+        {
+            GameObject landingEffect = new GameObject(isVase ? "VaseLanding" : "ObstacleLanding");
+            landingEffect.transform.position = position;
+            
+            ParticleSystem particles = landingEffect.AddComponent<ParticleSystem>();
+            var main = particles.main;
+            main.startLifetime = isVase ? 0.4f : 0.25f;
+            main.startSpeed = isVase ? 1.5f : 0.8f;
+            main.startSize = isVase ? 0.06f : 0.04f;
+            main.maxParticles = isVase ? 12 : 6;
+            
+            if (isVase)
+            {
+                main.startColor = new Color(0.9f, 0.8f, 0.6f, 0.6f); // Dusty/ceramic color
+            }
+            else
+            {
+                main.startColor = new Color(0.7f, 0.7f, 0.7f, 0.5f); // Stone/box dust
+            }
+            
+            var emission = particles.emission;
+            emission.SetBursts(new ParticleSystem.Burst[]
+            {
+                new ParticleSystem.Burst(0.0f, isVase ? 12 : 6)
+            });
+            
+            var shape = particles.shape;
+            shape.enabled = true;
+            shape.shapeType = ParticleSystemShapeType.Circle;
+            shape.radius = isVase ? 0.12f : 0.08f;
+            
+            var velocityOverLifetime = particles.velocityOverLifetime;
+            velocityOverLifetime.enabled = true;
+            velocityOverLifetime.space = ParticleSystemSimulationSpace.Local;
+            velocityOverLifetime.radial = new ParticleSystem.MinMaxCurve(isVase ? 2.5f : 1.5f);
+            
+            Destroy(landingEffect, 1f);
+            yield return null;
         }
         
         private IEnumerator DropAllUntilStable()
@@ -467,6 +624,8 @@ namespace Managers
         
         private void FillEmptySpaces()
         {
+            List<CubeBlock> newBlocks = new List<CubeBlock>();
+            
             for (int x = 0; x < width; x++)
             {
                 int spawnY = height;
@@ -475,15 +634,14 @@ namespace Managers
                 {
                     // Condition to check is there is an empty cell where is no any obstacle under it
                     // (For stone and box)
-                    // TODO: fix
                     if (cubes[x, y] is null && 
                         obstacles[x, y] is null && 
                         rockets[x, y] is null)
                     {
-                        // Create the cube to fall down
+                        // Create the cube to fall down with enhanced spawning
                         BlockColor randomColor = GetRandomColorEnum();
                         Vector2Int pos = new Vector2Int(x, y);
-                        Vector3 spawnPos = GetWorldPosition(x, spawnY); // spawn above
+                        Vector3 spawnPos = GetWorldPosition(x, height + 2); // spawn at medium height
                         Vector3 finalPos = GetWorldPosition(x, y);
 
                         GameObject obj = Instantiate(cubePrefab, spawnPos, Quaternion.identity, gridRoot);
@@ -491,7 +649,9 @@ namespace Managers
                         newCube.Initialize(randomColor, pos);
                         cubes[x, y] = newCube;
 
-                        newCube.transform.position = finalPos;
+                        // Add initial spawn effects
+                        StartCoroutine(AnimateNewBlockSpawn(newCube, spawnPos, finalPos));
+                        newBlocks.Add(newCube);
 
                         spawnY++; // jump to up of the cell to fall new blocks
                     }
@@ -502,7 +662,110 @@ namespace Managers
                     }
                 }
             }
+            
+            // Start cascading effect for all new blocks
+            if (newBlocks.Count > 0)
+            {
+                StartCoroutine(CascadingNewBlockEffect(newBlocks));
+            }
+            
             StartCoroutine(DelayedHintUpdate());
+        }
+        
+        private IEnumerator AnimateNewBlockSpawn(CubeBlock newBlock, Vector3 spawnPos, Vector3 finalPos)
+        {
+            if (newBlock == null) yield break;
+            
+            Transform blockTransform = newBlock.transform;
+            Vector3 originalScale = blockTransform.localScale;
+            
+            // Position at moderate height above grid
+            Camera cam = Camera.main;
+            if (cam != null)
+            {
+                float cameraTop = cam.transform.position.y + cam.orthographicSize;
+                spawnPos.y = Mathf.Min(spawnPos.y, cameraTop + 1.2f); // Medium height above camera view
+            }
+            
+            // Start with normal scale but positioned just off-screen
+            blockTransform.localScale = originalScale;
+            blockTransform.position = spawnPos;
+            
+            // Small delay
+            yield return new WaitForSeconds(Random.Range(0f, 0.06f));
+            
+            if (blockTransform != null)
+            {
+                StartCoroutine(AnimateBlockFall(blockTransform, finalPos));
+            }
+        }
+        
+        private IEnumerator CascadingNewBlockEffect(List<CubeBlock> newBlocks)
+        {
+            // Group blocks by column for wave effect
+            var columnGroups = new Dictionary<int, List<CubeBlock>>();
+            
+            foreach (var block in newBlocks)
+            {
+                int x = block.gridPosition.x;
+                if (!columnGroups.ContainsKey(x))
+                {
+                    columnGroups[x] = new List<CubeBlock>();
+                }
+                columnGroups[x].Add(block);
+            }
+            
+            // Create wave effect from center outward
+            int centerX = width / 2;
+            var sortedColumns = columnGroups.Keys.OrderBy(x => Mathf.Abs(x - centerX)).ToArray();
+            
+            foreach (int x in sortedColumns)
+            {
+                // Delay between columns for wave effect
+                yield return new WaitForSeconds(0.04f);
+                
+                // Add subtle sparkle effect at top of each column
+                Vector3 columnTop = GetWorldPosition(x, height);
+                
+                // Keep sparkle within camera view
+                Camera cam = Camera.main;
+                if (cam != null)
+                {
+                    float maxY = cam.transform.position.y + cam.orthographicSize - 0.5f;
+                    columnTop.y = Mathf.Min(columnTop.y, maxY);
+                }
+                
+                StartCoroutine(CreateColumnSparkle(columnTop));
+            }
+        }
+        
+        private IEnumerator CreateColumnSparkle(Vector3 position)
+        {
+            GameObject sparkle = new GameObject("ColumnSparkle");
+            sparkle.transform.position = position;
+            
+            ParticleSystem particles = sparkle.AddComponent<ParticleSystem>();
+            var main = particles.main;
+            main.startLifetime = 0.5f;
+            main.startSpeed = 2f;
+            main.startSize = 0.08f;
+            main.startColor = new Color(0.8f, 0.9f, 1f, 0.8f);
+            main.maxParticles = 12;
+            
+            var emission = particles.emission;
+            emission.SetBursts(new ParticleSystem.Burst[]
+            {
+                new ParticleSystem.Burst(0.0f, 12)
+            });
+            
+            var shape = particles.shape;
+            shape.enabled = true;
+            shape.shapeType = ParticleSystemShapeType.Cone;
+            shape.angle = 25f;
+            shape.radius = 0.05f;
+            
+            Destroy(sparkle, 1f);
+            yield return null;
         }
         
         private IEnumerator AnimateBlockFall(Transform blockTransform, Vector3 targetPosition)
@@ -516,8 +779,37 @@ namespace Managers
             animatingTransforms.Add(blockTransform);
             
             Vector3 startPosition = blockTransform.position;
-            float duration = 0.3f;
+            float fallDistance = startPosition.y - targetPosition.y;
+            
+            // Balanced animation speed
+            float baseDuration = 0.35f;
+            float duration = Mathf.Max(0.2f, baseDuration + (fallDistance * 0.03f));
+            
             float elapsed = 0f;
+            
+            Vector3 originalScale = blockTransform.localScale;
+            float rotationSpeed = Random.Range(-120f, 120f);
+            
+            // Make block invisible if it's outside camera view initially
+            SpriteRenderer spriteRenderer = blockTransform.GetComponent<SpriteRenderer>();
+            bool wasVisible = true;
+            if (spriteRenderer != null)
+            {
+                Camera cam = Camera.main;
+                if (cam != null)
+                {
+                    float cameraTop = cam.transform.position.y + cam.orthographicSize;
+                    if (startPosition.y > cameraTop)
+                    {
+                        spriteRenderer.color = new Color(spriteRenderer.color.r, spriteRenderer.color.g, spriteRenderer.color.b, 0f);
+                        wasVisible = false;
+                    }
+                }
+            }
+            
+            // Small delay
+            float initialDelay = Random.Range(0f, 0.04f);
+            yield return new WaitForSeconds(initialDelay);
 
             while (elapsed < duration)
             {
@@ -530,24 +822,176 @@ namespace Managers
                 
                 elapsed += Time.deltaTime;
                 float t = elapsed / duration;
-                t = Mathf.SmoothStep(0f, 1f, t);
                 
-                blockTransform.position = Vector3.Lerp(startPosition, targetPosition, t);
+                // Enhanced easing with anticipation and overshoot
+                float easeT;
+                if (t < 0.7f)
+                {
+                    // Accelerating fall with gravity effect
+                    easeT = t * t * 1.4f; 
+                }
+                else
+                {
+                    // Deceleration with slight bounce preparation
+                    float bounceT = (t - 0.7f) / 0.3f;
+                    easeT = 0.7f * 0.7f * 1.4f + bounceT * bounceT * 0.3f;
+                }
+                
+                // Position interpolation
+                Vector3 currentPos = Vector3.Lerp(startPosition, targetPosition, easeT);
+                
+                // Add nice horizontal wobble during fall
+                float wobbleIntensity = 0.025f * (1f - t); // Wobble decreases as it approaches target
+                float wobbleOffset = Mathf.Sin(elapsed * 12f) * wobbleIntensity;
+                currentPos.x += wobbleOffset;
+                
+                blockTransform.position = currentPos;
+                
+                // Make block visible when it enters camera view
+                if (!wasVisible && spriteRenderer != null)
+                {
+                    Camera cam = Camera.main;
+                    if (cam != null)
+                    {
+                        float cameraTop = cam.transform.position.y + cam.orthographicSize;
+                        if (currentPos.y <= cameraTop)
+                        {
+                            spriteRenderer.color = new Color(spriteRenderer.color.r, spriteRenderer.color.g, spriteRenderer.color.b, 1f);
+                            wasVisible = true;
+                        }
+                    }
+                }
+                
+                float scaleEffect = 1f + Mathf.Sin(elapsed * 9f) * 0.06f * (1f - t);
+                blockTransform.localScale = originalScale * scaleEffect;
+                
+                float currentRotation = rotationSpeed * elapsed * (1f - t);
+                blockTransform.rotation = Quaternion.Euler(0, 0, currentRotation);
+                
                 yield return null;
             }
-
-            // Final check before setting final position
+            
             if (blockTransform != null)
             {
-                blockTransform.position = targetPosition;
-                animatingTransforms.Remove(blockTransform);
+                yield return StartCoroutine(AnimateBounceLanding(blockTransform, targetPosition, originalScale));
             }
-            else
+            
+            if (animatingTransforms.Contains(blockTransform))
             {
                 animatingTransforms.Remove(blockTransform);
             }
         }
-
+        
+        private IEnumerator AnimateBounceLanding(Transform blockTransform, Vector3 targetPosition, Vector3 originalScale)
+        {
+            if (blockTransform == null) yield break;
+            
+            // Landing bounce effect
+            float bounceTime = 0.12f;
+            float elapsed = 0f;
+            
+            while (elapsed < bounceTime)
+            {
+                if (blockTransform == null) yield break;
+                
+                elapsed += Time.deltaTime;
+                float t = elapsed / bounceTime;
+                
+                // Bounce scale effect
+                float bounceScale = 1f + Mathf.Sin(t * Mathf.PI) * 0.15f;
+                blockTransform.localScale = originalScale * bounceScale;
+                
+                float impactOffset = Mathf.Sin(t * Mathf.PI) * 0.02f;
+                blockTransform.position = targetPosition + Vector3.down * impactOffset;
+                
+                yield return null;
+            }
+            
+            // Ensure final state
+            if (blockTransform != null)
+            {
+                blockTransform.position = targetPosition;
+                blockTransform.localScale = originalScale;
+                blockTransform.rotation = Quaternion.identity;
+                
+                // Ensure block is fully visible at the end
+                SpriteRenderer finalSR = blockTransform.GetComponent<SpriteRenderer>();
+                if (finalSR != null)
+                {
+                    finalSR.color = new Color(finalSR.color.r, finalSR.color.g, finalSR.color.b, 1f);
+                }
+                
+                StartCoroutine(CreateLandingEffect(targetPosition));
+            }
+        }
+        
+        private IEnumerator CreateLandingEffect(Vector3 position)
+        {
+            // Create small dust particles on landing
+            if (ParticleEffectManager.Instance != null)
+            {
+                // Small sparkle effect on landing
+                GameObject sparkleEffect = new GameObject("LandingSparkle");
+                sparkleEffect.transform.position = position;
+                
+                ParticleSystem particles = sparkleEffect.AddComponent<ParticleSystem>();
+                var main = particles.main;
+                main.startLifetime = 0.3f;
+                main.startSpeed = 1f;
+                main.startSize = 0.05f;
+                main.startColor = new Color(1f, 1f, 1f, 0.7f);
+                main.maxParticles = 8;
+                
+                var emission = particles.emission;
+                emission.SetBursts(new ParticleSystem.Burst[]
+                {
+                    new ParticleSystem.Burst(0.0f, 8)
+                });
+                emission.enabled = true;
+                
+                var shape = particles.shape;
+                shape.enabled = true;
+                shape.shapeType = ParticleSystemShapeType.Circle;
+                shape.radius = 0.1f;
+                
+                var velocityOverLifetime = particles.velocityOverLifetime;
+                velocityOverLifetime.enabled = true;
+                velocityOverLifetime.space = ParticleSystemSimulationSpace.Local;
+                velocityOverLifetime.radial = new ParticleSystem.MinMaxCurve(2f);
+                
+                // Auto-destroy after effect
+                Destroy(sparkleEffect, 1f);
+            }
+            
+            yield return null;
+        }
+        
+        public void StartCascadingBlockFalls()
+        {
+            StartCoroutine(CascadingFallSequence());
+        }
+        
+        private IEnumerator CascadingFallSequence()
+        {
+            for (int x = 0; x < width; x++)
+            {
+                bool columnHasMovement = false;
+                
+                for (int y = height - 1; y >= 0; y--)
+                {
+                    if (cubes[x, y] != null)
+                    {
+                        // Add subtle delay between columns for wave effect
+                        if (columnHasMovement)
+                        {
+                            yield return new WaitForSeconds(0.02f);
+                        }
+                        columnHasMovement = true;
+                    }
+                }
+            }
+        }
+        
         private IEnumerator DelayedHintUpdate()
         {
             yield return new WaitForSeconds(0.5f);
@@ -625,12 +1069,11 @@ namespace Managers
             // Drop everything until stable
             yield return StartCoroutine(DropAllUntilStable());
             
-            // Wait for all animations to complete before filling empty spaces
-            yield return new WaitForSeconds(0.5f);
-            
+            // Fill empty spaces immediately
             FillEmptySpaces();
             
-            yield return new WaitForSeconds(0.2f);
+            // Wait for all falling animations to complete
+            yield return new WaitForSeconds(0.5f);
             
             goalPanelManager.DecrementMove();
             
@@ -724,8 +1167,7 @@ namespace Managers
             
             FillEmptySpaces();
             
-            // Minimal wait before allowing next move
-            yield return new WaitForSeconds(0.1f);
+            yield return new WaitForSeconds(0.3f);
 
             goalPanelManager.DecrementMove();
             
@@ -752,8 +1194,8 @@ namespace Managers
             
             FillEmptySpaces();
             
-            // Minimal wait before allowing next move
-            yield return new WaitForSeconds(0.1f);
+            // Wait for falling animations to complete before allowing next move
+            yield return new WaitForSeconds(0.3f);
 
             goalPanelManager.DecrementMove();
             
