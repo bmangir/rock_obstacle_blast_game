@@ -33,7 +33,7 @@ namespace Managers
 
         public void SetCurrentLevel(int level)
         {
-            CurrentLevel = Mathf.Clamp(level, 1, MaxLevel);
+            CurrentLevel = level;
             PlayerPrefs.SetInt(LastPlayedLevelKey, CurrentLevel);
             PlayerPrefs.Save();
         }

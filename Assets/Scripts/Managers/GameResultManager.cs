@@ -18,6 +18,7 @@ namespace Managers
         [SerializeField] private Button tryAgainButton;
         [SerializeField] private Button loseReturnButton;
         [SerializeField] private TextMeshProUGUI gameOverText;
+        [SerializeField] private GameObject buttonWrapper;
         
         [Header("UI References")]
         [SerializeField] private Canvas resultCanvas;
@@ -80,6 +81,11 @@ namespace Managers
                 }
             }
             
+            if (buttonWrapper != null)
+            {
+                buttonWrapper.SetActive(!isLastLevel);
+            }
+            
             if (resultCanvas is not null)
                 resultCanvas.sortingOrder = 100;
         }
@@ -91,6 +97,12 @@ namespace Managers
                 loseScreen.SetActive(true);
                 if (gameOverText is not null)
                     gameOverText.text = "Game Over!";
+                    
+                if (buttonWrapper != null)
+                {
+                    bool isLastLevel = LevelManager.Instance.IsLastLevel();
+                    buttonWrapper.SetActive(!isLastLevel);
+                }
             }
             
             if (resultCanvas is not null)
@@ -105,13 +117,8 @@ namespace Managers
         
         private void OnContinueClicked()
         {
-            // Increment level when user clicks Continue
-            if (!LevelManager.Instance.IsLastLevel())
-            {
-                LevelManager.Instance.SetCurrentLevel(LevelManager.Instance.CurrentLevel + 1);
-            }
+            LevelManager.Instance.SetCurrentLevel(LevelManager.Instance.CurrentLevel + 1);
             
-            // Navigate to next level or main scene if all levels completed
             if (LevelManager.Instance.AllLevelsFinished())
             {
                 SceneManager.LoadScene("MainScene");
@@ -129,12 +136,7 @@ namespace Managers
         
         private void OnWinReturnClicked()
         {
-            // Increment level when user clicks Return from WIN screen
-            // Update the Level Button text in MainScene
-            if (!LevelManager.Instance.IsLastLevel())
-            {
-                LevelManager.Instance.SetCurrentLevel(LevelManager.Instance.CurrentLevel + 1);
-            }
+            LevelManager.Instance.SetCurrentLevel(LevelManager.Instance.CurrentLevel + 1);
             
             SceneManager.LoadScene("MainScene");
         }
