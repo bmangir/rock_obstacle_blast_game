@@ -238,6 +238,16 @@ namespace Managers
             // Start the spectacular combo sequence
             StartCoroutine(SpectacularComboExplosion(position, intensity));
         }
+        
+        public void CreateStarCelebrationEffect(Vector3 position, int starCount, Color starColor)
+        {
+            StartCoroutine(SpawnStarCelebrationEffect(position, starCount, starColor));
+        }
+        
+        public void CreateStarBurstEffect(Vector3 position, Color starColor, int particleCount = 8)
+        {
+            StartCoroutine(SpawnStarBurstEffect(position, starColor, particleCount));
+        }
 
         private IEnumerator SpectacularComboExplosion(Vector3 centerPosition, float intensity)
         {
@@ -774,20 +784,22 @@ namespace Managers
 
         private IEnumerator AnimateParticle(GameObject particle, ParticleSettings settings)
         {
-            if (particle is null) yield break;
+            if (particle == null) yield break;
 
             ParticleData data = particle.GetComponent<ParticleData>();
             SpriteRenderer sr = particle.GetComponent<SpriteRenderer>();
             
-            if (data is null || sr is null) yield break;
+            if (data == null || sr == null) yield break;
 
             float elapsedTime = 0f;
             Vector3 velocity = new Vector3(data.velocity.x, data.velocity.y, 0);
             Color originalColor = sr.color;
 
-            while (elapsedTime < data.lifetime && particle != null)
+            while (elapsedTime < data.lifetime && particle != null && sr != null)
             {
                 float t = elapsedTime / data.lifetime;
+
+                if (particle == null || particle.transform == null || sr == null) break;
 
                 // Update position with gravity
                 velocity.y += settings.gravity * Time.deltaTime;
@@ -811,7 +823,7 @@ namespace Managers
                 yield return null;
             }
 
-            if (particle is not null)
+            if (particle != null)
             {
                 Destroy(particle);
             }
@@ -971,9 +983,10 @@ namespace Managers
 
         private IEnumerator AnimateTrailParticle(GameObject particle, Vector3 direction)
         {
-            if (particle is null) yield break;
+            if (particle == null) yield break;
 
             SpriteRenderer sr = particle.GetComponent<SpriteRenderer>();
+            if (sr == null) yield break;
             
             // Enhanced velocity with some backwards motion for realistic trail
             Vector3 baseVelocity = direction * Random.Range(0.5f, 1.5f);
@@ -988,9 +1001,11 @@ namespace Managers
             // Add slight rotation
             float rotationSpeed = Random.Range(-180f, 180f);
 
-            while (elapsed < lifetime && particle is not null)
+            while (elapsed < lifetime && particle != null && sr != null)
             {
                 float t = elapsed / lifetime;
+                
+                if (particle == null || particle.transform == null || sr == null) break;
                 
                 // Move particle with deceleration
                 float currentSpeed = Mathf.Lerp(1f, 0.3f, t); // Slow down over time
@@ -1015,7 +1030,7 @@ namespace Managers
                 yield return null;
             }
 
-            if (particle is not null)
+            if (particle != null)
             {
                 Destroy(particle);
             }
@@ -1054,6 +1069,351 @@ namespace Managers
             {
                 Destroy(burst);
             }
+        }
+
+        private IEnumerator SpawnStarCelebrationEffect(Vector3 position, int starCount, Color starColor)
+        {
+            yield return StartCoroutine(CreateStarSparkleEffect(position, starColor));
+            
+            for (int i = 0; i < starCount; i++)
+            {
+                Vector3 offset = Random.insideUnitCircle * 0.3f;
+                StartCoroutine(CreateStarShowerEffect(position + offset, starColor, starCount));
+                yield return new WaitForSeconds(0.1f);
+            }
+            
+            yield return new WaitForSeconds(0.2f);
+            StartCoroutine(CreateGrandStarFinale(position, starColor, starCount));
+        }
+        
+        private IEnumerator SpawnStarBurstEffect(Vector3 position, Color starColor, int particleCount)
+        {
+            string[] starSprites = { 
+                "UI/Gameplay/Celebration/Particles/additive_particle_star",
+                "Rocket/Particles/particle_star" 
+            };
+            
+            List<GameObject> particles = new List<GameObject>();
+            
+            for (int i = 0; i < particleCount; i++)
+            {
+                string spritePath = starSprites[Random.Range(0, starSprites.Length)];
+                Sprite starSprite = Resources.Load<Sprite>(spritePath);
+                
+                if (starSprite != null)
+                {
+                    GameObject particle = CreateStarParticle(position, starSprite, starColor);
+                    particles.Add(particle);
+                }
+            }
+            
+            foreach (GameObject particle in particles)
+            {
+                if (particle != null)
+                {
+                    StartCoroutine(AnimateStarParticle(particle));
+                }
+            }
+            
+            yield return null;
+        }
+        
+        private IEnumerator CreateStarSparkleEffect(Vector3 position, Color starColor)
+        {
+            Sprite additiveStarSprite = Resources.Load<Sprite>("UI/Gameplay/Celebration/Particles/additive_particle_star");
+            
+            if (additiveStarSprite != null)
+            {
+                int sparkleCount = 12;
+                for (int i = 0; i < sparkleCount; i++)
+                {
+                    float angle = (360f / sparkleCount) * i * Mathf.Deg2Rad;
+                    Vector3 direction = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
+                    Vector3 spawnPos = position + direction * 0.15f;
+                    
+                    GameObject sparkle = CreateStarParticle(spawnPos, additiveStarSprite, starColor);
+                    sparkle.transform.localScale = Vector3.one * 0.3f;
+                    
+                    StartCoroutine(AnimateSparkleParticle(sparkle, direction));
+                }
+            }
+            
+            yield return new WaitForSeconds(0.3f);
+        }
+        
+        private IEnumerator CreateStarShowerEffect(Vector3 position, Color starColor, int starCount)
+        {
+            // Create falling star shower effect
+            Sprite starSprite = Resources.Load<Sprite>("UI/Gameplay/Celebration/star");
+            
+            if (starSprite != null)
+            {
+                int showerCount = starCount * 3;
+                
+                for (int i = 0; i < showerCount; i++)
+                {
+                    Vector3 spawnPos = position + new Vector3(
+                        Random.Range(-1f, 1f), 
+                        Random.Range(0.5f, 1.5f), 
+                        0f);
+                    
+                    GameObject star = CreateStarParticle(spawnPos, starSprite, starColor);
+                    star.transform.localScale = Vector3.one * Random.Range(0.1f, 0.25f);
+                    
+                    StartCoroutine(AnimateShowerStar(star));
+                    
+                    yield return new WaitForSeconds(Random.Range(0.05f, 0.15f));
+                }
+            }
+        }
+        
+        private IEnumerator CreateGrandStarFinale(Vector3 position, Color starColor, int starCount)
+        {
+            string[] allStarSprites = { 
+                "UI/Gameplay/Celebration/star",
+                "UI/Gameplay/Celebration/Particles/additive_particle_star",
+                "Rocket/Particles/particle_star" 
+            };
+            
+            int finaleCount = starCount * 15;
+            
+            for (int i = 0; i < finaleCount; i++)
+            {
+                string spritePath = allStarSprites[Random.Range(0, allStarSprites.Length)];
+                Sprite starSprite = Resources.Load<Sprite>(spritePath);
+                
+                if (starSprite != null)
+                {
+                    float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
+                    float distance = Random.Range(0.2f, 2.5f);
+                    Vector3 direction = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
+                    Vector3 spawnPos = position + direction * 0.1f;
+                    
+                    GameObject star = CreateStarParticle(spawnPos, starSprite, starColor);
+                    star.transform.localScale = Vector3.one * Random.Range(0.15f, 0.4f);
+                    
+                    StartCoroutine(AnimateFinaleStarParticle(star, direction, distance));
+                }
+            }
+            
+            StartCoroutine(CreateStarScreenFlash(starColor));
+            
+            yield return null;
+        }
+        
+        private GameObject CreateStarParticle(Vector3 position, Sprite sprite, Color color)
+        {
+            GameObject particle = new GameObject("StarParticle");
+            particle.transform.position = position;
+            
+            SpriteRenderer sr = particle.AddComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.color = color;
+            sr.sortingOrder = 20;
+            
+            return particle;
+        }
+        
+        private IEnumerator AnimateStarParticle(GameObject particle)
+        {
+            if (particle == null) yield break;
+            
+            SpriteRenderer sr = particle.GetComponent<SpriteRenderer>();
+            if (sr == null) yield break;
+            
+            Vector3 originalScale = particle.transform.localScale;
+            Color originalColor = sr.color;
+            
+            // Random motion
+            Vector3 velocity = Random.insideUnitCircle.normalized * Random.Range(2f, 4f);
+            float rotationSpeed = Random.Range(-360f, 360f);
+            float lifetime = Random.Range(0.8f, 1.2f);
+            
+            float elapsed = 0f;
+            while (elapsed < lifetime && particle != null && sr != null)
+            {
+                float t = elapsed / lifetime;
+                
+                if (particle == null || particle.transform == null || sr == null) break;
+                
+                velocity.y -= 3f * Time.deltaTime; // Gravity
+                particle.transform.position += velocity * Time.deltaTime;
+                
+                particle.transform.Rotate(0, 0, rotationSpeed * Time.deltaTime);
+                
+                // Update scale with bounce
+                float scale = Mathf.Lerp(1f, 0.2f, Mathf.Pow(t, 0.7f));
+                particle.transform.localScale = originalScale * scale;
+                
+                // Update alpha
+                Color color = originalColor;
+                color.a = Mathf.Lerp(1f, 0f, Mathf.Pow(t, 0.5f));
+                sr.color = color;
+                
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            
+            if (particle != null) Destroy(particle);
+        }
+        
+        private IEnumerator AnimateSparkleParticle(GameObject particle, Vector3 direction)
+        {
+            if (particle == null) yield break;
+            
+            SpriteRenderer sr = particle.GetComponent<SpriteRenderer>();
+            if (sr == null) yield break;
+            
+            Vector3 originalScale = particle.transform.localScale;
+            Color originalColor = sr.color;
+            
+            Vector3 velocity = direction * Random.Range(3f, 5f);
+            float lifetime = 0.6f;
+            
+            float elapsed = 0f;
+            while (elapsed < lifetime && particle != null && sr != null)
+            {
+                float t = elapsed / lifetime;
+                
+                if (particle == null || particle.transform == null || sr == null) break;
+                
+                particle.transform.position += velocity * Time.deltaTime;
+                velocity *= 0.98f; // Decelerate
+                
+                // Twinkle effect
+                float twinkle = Mathf.Sin(t * 30f) * 0.3f + 0.7f;
+                float scale = Mathf.Lerp(0.3f, 0.1f, t) * twinkle;
+                particle.transform.localScale = originalScale * scale;
+                
+                // Fade out
+                Color color = originalColor;
+                color.a = Mathf.Lerp(1f, 0f, t * t);
+                sr.color = color;
+                
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            
+            if (particle != null) Destroy(particle);
+        }
+        
+        private IEnumerator AnimateShowerStar(GameObject particle)
+        {
+            if (particle == null) yield break;
+            
+            SpriteRenderer sr = particle.GetComponent<SpriteRenderer>();
+            if (sr == null) yield break;
+            
+            Vector3 originalScale = particle.transform.localScale;
+            Color originalColor = sr.color;
+            
+            Vector3 velocity = new Vector3(Random.Range(-1f, 1f), Random.Range(-2f, -4f), 0f);
+            float rotationSpeed = Random.Range(-180f, 180f);
+            float lifetime = Random.Range(1f, 1.5f);
+            
+            float elapsed = 0f;
+            while (elapsed < lifetime && particle != null && sr != null)
+            {
+                float t = elapsed / lifetime;
+                
+                if (particle == null || particle.transform == null || sr == null) break;
+                
+                // Falling motion
+                particle.transform.position += velocity * Time.deltaTime;
+                velocity.y -= 2f * Time.deltaTime; // Gravity
+                
+                particle.transform.Rotate(0, 0, rotationSpeed * Time.deltaTime);
+                
+                float scale = Mathf.Lerp(1f, 0.5f, t);
+                particle.transform.localScale = originalScale * scale;
+                
+                Color color = originalColor;
+                color.a = Mathf.Lerp(0.9f, 0f, Mathf.Pow(t, 0.7f));
+                sr.color = color;
+                
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            
+            if (particle != null) Destroy(particle);
+        }
+        
+        private IEnumerator AnimateFinaleStarParticle(GameObject particle, Vector3 direction, float distance)
+        {
+            if (particle == null) yield break;
+            
+            SpriteRenderer sr = particle.GetComponent<SpriteRenderer>();
+            if (sr == null) yield break;
+            
+            Vector3 originalScale = particle.transform.localScale;
+            Color originalColor = sr.color;
+            
+            Vector3 velocity = direction * Random.Range(4f, 8f);
+            float rotationSpeed = Random.Range(-540f, 540f);
+            float lifetime = Random.Range(1.2f, 2f);
+            
+            float elapsed = 0f;
+            while (elapsed < lifetime && particle != null && sr != null)
+            {
+                float t = elapsed / lifetime;
+                
+                if (particle == null || particle.transform == null || sr == null) break;
+                
+                particle.transform.position += velocity * Time.deltaTime;
+                velocity *= 0.96f; // Gradual deceleration
+                velocity.y -= 1.5f * Time.deltaTime; // Light gravity
+                
+                particle.transform.Rotate(0, 0, rotationSpeed * Time.deltaTime);
+                
+                float pulse = Mathf.Sin(t * 15f) * 0.2f + 0.8f;
+                float scale = Mathf.Lerp(1.2f, 0.3f, t) * pulse;
+                particle.transform.localScale = originalScale * scale;
+                
+                Color color = originalColor;
+                color.a = Mathf.Lerp(1f, 0f, Mathf.Pow(t, 0.6f));
+                sr.color = color;
+                
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            
+            if (particle != null) Destroy(particle);
+        }
+        
+        private IEnumerator CreateStarScreenFlash(Color starColor)
+        {
+            // Create subtle screen flash effect
+            GameObject flash = new GameObject("StarScreenFlash");
+            flash.transform.position = Vector3.zero;
+            
+            SpriteRenderer sr = flash.AddComponent<SpriteRenderer>();
+            sr.sprite = CreateCircleSprite();
+            sr.sortingOrder = 25;
+            
+            Color flashColor = Color.Lerp(starColor, Color.white, 0.6f);
+            flashColor.a = 0.3f;
+            sr.color = flashColor;
+            
+            Vector3 cameraPos = Camera.main.transform.position;
+            flash.transform.position = new Vector3(cameraPos.x, cameraPos.y, 0f);
+            flash.transform.localScale = Vector3.one * 15f;
+            
+            float duration = 0.15f;
+            float elapsed = 0f;
+            
+            while (elapsed < duration && flash != null)
+            {
+                float t = elapsed / duration;
+                
+                Color color = flashColor;
+                color.a = Mathf.Lerp(0.3f, 0f, t * t);
+                sr.color = color;
+                
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            
+            if (flash != null) Destroy(flash);
         }
 
         /*

@@ -139,6 +139,19 @@ namespace Managers
             // Wait for all animations to complete
             yield return new WaitForSeconds(1.5f);
             
+            // Explode remaining rockets for bonus score BEFORE showing win screen
+            GridManager gridManager = FindObjectOfType<GridManager>();
+            if (gridManager != null)
+            {
+                int remainingRockets = gridManager.CountRemainingRockets();
+                if (remainingRockets > 0)
+                {
+                    yield return StartCoroutine(gridManager.ExplodeRemainingRockets());
+                    yield return new WaitForSeconds(0.5f);
+                }
+            }
+            
+            // Show win screen after all rockets have exploded
             GameResultManager resultManager = FindObjectOfType<GameResultManager>();
             if (resultManager is not null)
             {

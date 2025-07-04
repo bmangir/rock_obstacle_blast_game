@@ -10,5 +10,7 @@ namespace Data
         public int grid_height;
         public int move_count;
         public List<string> grid;
+        
+        public int optimal_moves = -1; // -1 means auto-calculate
     }
 }

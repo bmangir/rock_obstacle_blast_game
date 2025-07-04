@@ -49,6 +49,11 @@ namespace Managers
         {
             InitGrid();
             StartCoroutine(ShowInitialHints());
+            
+            if (ScoreManager.Instance != null)
+            {
+                ScoreManager.Instance.ResetScore();
+            }
         }
         
         private IEnumerator ShowInitialHints()
@@ -998,6 +1003,155 @@ namespace Managers
             ShowAllRocketHints();
         }
         
+        public IEnumerator ExplodeRemainingRockets()
+        {
+            List<RocketBlock> remainingRockets = new List<RocketBlock>();
+            
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    if (rockets[x, y] != null)
+                    {
+                        remainingRockets.Add(rockets[x, y]);
+                    }
+                }
+            }
+            
+            if (remainingRockets.Count == 0) yield break;
+            
+            // Explode rockets in sequence with normal rocket logic
+            foreach (var rocket in remainingRockets)
+            {
+                if (rocket != null && rocket.gameObject != null)
+                {
+                    // Store rocket data before destroying
+                    Vector2Int rocketGridPos = rocket.gridPosition;
+                    RocketDirection rocketDirection = rocket.direction;
+                    Vector3 centerPos = GetWorldPosition(rocketGridPos.x, rocketGridPos.y);
+                    
+                    // Add bonus score
+                    if (ScoreManager.Instance != null)
+                    {
+                        ScoreManager.Instance.AddRocketScore();
+                    }
+                    
+                    rockets[rocketGridPos.x, rocketGridPos.y] = null;
+                    
+                    // Normal rocket explosion effects
+                    CreateRocketSmoke(centerPos);
+                    StartCoroutine(AnimateRocketParts(centerPos, rocketDirection));
+                    ParticleEffectManager.Instance.CreateRocketBlastEffect(centerPos, 2f);
+                    
+                    StartCoroutine(CreateRemainingRocketStarEffect(centerPos));
+                    
+                    CameraShakeManager.Instance.ShakeForRocketBlast();
+                    
+                    Destroy(rocket.gameObject);
+                    
+                    yield return StartCoroutine(RocketBlastEffect(rocketDirection, rocketGridPos));
+                    
+                    yield return StartCoroutine(DropAllUntilStable());
+                    FillEmptySpaces();
+                    
+                    yield return new WaitForSeconds(0.2f);
+                }
+            }
+            
+            if (remainingRockets.Count > 1)
+            {
+                Vector3 centerScreen = new Vector3(0, 0, 0);
+                ParticleEffectManager.Instance.CreateComboBlastEffect(centerScreen, remainingRockets.Count);
+                yield return new WaitForSeconds(0.5f);
+            }
+        }
+        
+        public int CountRemainingRockets()
+        {
+            int count = 0;
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    if (rockets[x, y] != null)
+                    {
+                        count++;
+                    }
+                }
+            }
+            return count;
+        }
+        
+        private IEnumerator CreateRemainingRocketStarEffect(Vector3 position)
+        {
+            Sprite starSprite = Resources.Load<Sprite>("UI/Gameplay/Celebration/Particles/additive_particle_star");
+            if (starSprite == null)
+            {
+                Debug.LogWarning("Could not load additive_particle_star sprite!");
+                yield break;
+            }
+            
+            for (int i = 0; i < 12; i++)
+            {
+                GameObject starParticle = new GameObject("RemainingRocketStar");
+                starParticle.transform.position = position;
+                
+                SpriteRenderer sr = starParticle.AddComponent<SpriteRenderer>();
+                sr.sprite = starSprite;
+                sr.color = Color.yellow;
+                sr.sortingOrder = 15;
+                
+                // Random direction for each star
+                float angle = (i * 30f) + Random.Range(-15f, 15f);
+                Vector3 direction = new Vector3(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad), 0f);
+                
+                StartCoroutine(AnimateRemainingRocketStar(starParticle, direction));
+            }
+            
+            yield return null;
+        }
+        
+        private IEnumerator AnimateRemainingRocketStar(GameObject particle, Vector3 direction)
+        {
+            if (particle == null) yield break;
+            
+            SpriteRenderer sr = particle.GetComponent<SpriteRenderer>();
+            if (sr == null) yield break;
+            
+            Vector3 originalScale = particle.transform.localScale;
+            Color originalColor = sr.color;
+            
+            Vector3 velocity = direction * Random.Range(3f, 6f);
+            float rotationSpeed = Random.Range(-360f, 360f);
+            float lifetime = Random.Range(1f, 1.5f);
+            
+            float elapsed = 0f;
+            while (elapsed < lifetime && particle != null && sr != null)
+            {
+                float t = elapsed / lifetime;
+                
+                if (particle == null || particle.transform == null || sr == null) break;
+                
+                velocity.y -= 2f * Time.deltaTime;
+                particle.transform.position += velocity * Time.deltaTime;
+                
+                particle.transform.Rotate(0, 0, rotationSpeed * Time.deltaTime);
+                
+                float sparkle = Mathf.Sin(t * 20f) * 0.3f + 0.7f;
+                float scale = Mathf.Lerp(1.2f, 0.3f, t) * sparkle;
+                particle.transform.localScale = originalScale * scale;
+                
+                Color color = originalColor;
+                color.a = Mathf.Lerp(1f, 0f, t * t);
+                sr.color = color;
+                
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            
+            if (particle != null) Destroy(particle);
+        }
+        
         private IEnumerator BlastCubes(List<CubeBlock> group, Vector2Int origin)
         {
             HashSet<Vector2Int> affectedObstaclePositions = new HashSet<Vector2Int>();
@@ -1039,6 +1193,11 @@ namespace Managers
                 }
             }
             
+            if (ScoreManager.Instance != null)
+            {
+                ScoreManager.Instance.AddCubeScore(group.Count);
+            }
+            
             // Apply damage only once per unique obstacle
             foreach (var obstaclePos in obstacleNeighbors)
             {
@@ -1048,6 +1207,11 @@ namespace Managers
                     bool destroyed = obs.ApplyBlastDamage();
                     if (destroyed)
                     {
+                        if (ScoreManager.Instance != null)
+                        {
+                            ScoreManager.Instance.AddObstacleScore(obs.obstacleType);
+                        }
+                        
                         goalPanelManager.DecrementObstacle(obs.obstacleType);
                         affectedObstaclePositions.Add(obstaclePos);
                     }
@@ -1117,6 +1281,11 @@ namespace Managers
             foreach (var rocket in allRockets)
             {
                 rockets[rocket.gridPosition.x, rocket.gridPosition.y] = null;
+                
+                if (ScoreManager.Instance != null)
+                {
+                    ScoreManager.Instance.AddRocketScore();
+                }
             }
 
             List<Vector3> rocketPositions = new List<Vector3>();
@@ -1179,6 +1348,11 @@ namespace Managers
         private IEnumerator ExplodeRocket(RocketBlock rocket)
         {
             rockets[rocket.gridPosition.x, rocket.gridPosition.y] = null;
+
+            if (ScoreManager.Instance != null)
+            {
+                ScoreManager.Instance.AddRocketScore();
+            }
 
             Destroy(rocket.gameObject);
 

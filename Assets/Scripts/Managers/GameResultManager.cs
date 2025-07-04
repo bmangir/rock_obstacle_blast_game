@@ -18,6 +18,8 @@ namespace Managers
         [SerializeField] private GameObject starContainer;
         [SerializeField] private Image[] starImages = new Image[3]; // 3 stars max
         [SerializeField] private TextMeshProUGUI starDescriptionText;
+        [SerializeField] private TextMeshProUGUI scoreText;
+        [SerializeField] private TextMeshProUGUI scoreBreakdownText;
         
         [Header("Lose Screen")]
         [SerializeField] private GameObject loseScreen;
@@ -76,19 +78,28 @@ namespace Managers
             int completedLevel = LevelManager.Instance.CurrentLevel;
             bool isLastLevel = LevelManager.Instance.IsLastLevel();
             
-            // Calculate star rating
-            CalculateAndDisplayStars(completedLevel);
-            
             if (winScreen is not null)
             {
                 winScreen.SetActive(true);
                 
+                // Show level complete text initially
+                if (winLevelText is not null)
+                {
+                    // Check if this was the last level (level 10)
+                    if (isLastLevel)
+                    {
+                        winLevelText.text = "You Won All Levels !";
+                    }
+                    else
+                    {
+                        winLevelText.text = $"Level {completedLevel} Complete!";
+                    }
+                    winLevelText.gameObject.SetActive(true);
+                }
+                
                 // Check if this was the last level (level 10)
                 if (isLastLevel)
                 {
-                    if (winLevelText is not null)
-                        winLevelText.text = "You Won All Levels !";
-                        
                     // Hide continue button for final level, only show return
                     if (continueButton is not null)
                         continueButton.gameObject.SetActive(false);
@@ -98,9 +109,6 @@ namespace Managers
                 }
                 else
                 {
-                    if (winLevelText is not null)
-                        winLevelText.text = $"Level {completedLevel} Complete!";
-                        
                     // Show both buttons for normal levels
                     if (continueButton is not null)
                         continueButton.gameObject.SetActive(true);
@@ -108,6 +116,12 @@ namespace Managers
                     if (returnButton is not null)
                         returnButton.gameObject.SetActive(true);
                 }
+                
+                // Hide score texts initially
+                if (scoreText != null)
+                    scoreText.gameObject.SetActive(false);
+                if (scoreBreakdownText != null)
+                    scoreBreakdownText.gameObject.SetActive(false);
             }
             
             if (buttonWrapper != null)
@@ -117,7 +131,26 @@ namespace Managers
             
             if (resultCanvas is not null)
                 resultCanvas.sortingOrder = 100;
+                
+            StartCoroutine(DelayedScoreDisplay(completedLevel));
         }
+        
+        private System.Collections.IEnumerator DelayedScoreDisplay(int levelNumber)
+        {
+            // Show Stars
+            CalculateAndDisplayStars(levelNumber);
+            
+            yield return new WaitForSeconds(5f);
+            
+            if (winLevelText != null)
+                winLevelText.gameObject.SetActive(false);
+            
+            ShowScoreWithAnimation();
+        }
+        
+        private int calculatedStars;
+        private int calculatedFinalScore;
+        private string calculatedScoreBreakdown;
         
         private void CalculateAndDisplayStars(int levelNumber)
         {
@@ -131,20 +164,87 @@ namespace Managers
             GoalPanelManager goalManager = FindObjectOfType<GoalPanelManager>();
             if (goalManager == null) return;
             
+            GridManager gridManager = FindObjectOfType<GridManager>();
+            if (gridManager == null) return;
+            
             int usedMoves = goalManager.GetUsedMoves();
+            int remainingMoves = goalManager.GetTotalMoves() - usedMoves;
+            int remainingRockets = gridManager.CountRemainingRockets();
             float completionTime = StarRatingManager.Instance.GetElapsedTime();
             
             // Calculate star rating
-            int stars = StarRatingManager.Instance.CalculateStarRating(
+            calculatedStars = StarRatingManager.Instance.CalculateStarRating(
                 levelLoader.levelData, usedMoves, completionTime);
             
-            DisplayStarRating(stars, usedMoves, completionTime);
+            // Calculate final score
+            if (ScoreManager.Instance != null)
+            {
+                calculatedFinalScore = ScoreManager.Instance.CalculateFinalScore(calculatedStars, remainingMoves, remainingRockets);
+                calculatedScoreBreakdown = ScoreManager.Instance.GetScoreBreakdown(calculatedStars, remainingMoves, remainingRockets);
+            }
             
-            Debug.Log($"Level {levelNumber} completed with {stars} stars! " +
+            DisplayStarsOnly(calculatedStars);
+            
+            Debug.Log($"Level {levelNumber} completed with {calculatedStars} stars and {calculatedFinalScore} points! " +
                      $"Used {usedMoves} moves in {completionTime:F1} seconds");
         }
         
-        private void DisplayStarRating(int earnedStars, int usedMoves, float completionTime)
+        private void DisplayStarsOnly(int earnedStars)
+        {
+            if (starContainer != null)
+                starContainer.SetActive(true);
+            
+            // Update star visuals
+            for (int i = 0; i < starImages.Length; i++)
+            {
+                if (starImages[i] != null)
+                {
+                    starImages[i].sprite = starFilledSprite;
+                    
+                    if (i < earnedStars)
+                    {
+                        starImages[i].color = StarRatingManager.Instance.GetStarColor(earnedStars);
+                    }
+                    else
+                    {
+                        starImages[i].color = new Color(0.4f, 0.4f, 0.4f, 0.8f);
+                    }
+                    starImages[i].gameObject.SetActive(true);
+                }
+            }
+            
+            if (starDescriptionText != null)
+            {
+                starDescriptionText.text = StarRatingManager.Instance.GetStarDescription(earnedStars);
+            }
+            
+            if (scoreText != null)
+                scoreText.gameObject.SetActive(false);
+            if (scoreBreakdownText != null)
+                scoreBreakdownText.gameObject.SetActive(false);
+            
+            if (earnedStars > 0)
+            {
+                StartCoroutine(CreateStarCelebrationEffect(earnedStars));
+            }
+        }
+        
+        private void ShowScoreWithAnimation()
+        {
+            if (scoreText != null)
+            {
+                scoreText.text = $"Score: {calculatedFinalScore:N0}";
+                StartCoroutine(AnimateScoreText(scoreText, 0.0f)); // No delay for main score
+            }
+            
+            if (scoreBreakdownText != null && !string.IsNullOrEmpty(calculatedScoreBreakdown))
+            {
+                scoreBreakdownText.text = calculatedScoreBreakdown;
+                StartCoroutine(AnimateScoreText(scoreBreakdownText, 0.3f)); // Small delay for breakdown
+            }
+        }
+        
+        private void DisplayStarRating(int earnedStars, int usedMoves, float completionTime, int finalScore = 0, string scoreBreakdown = "")
         {
             if (starContainer != null)
                 starContainer.SetActive(true);
@@ -172,6 +272,18 @@ namespace Managers
             if (starDescriptionText != null)
             {
                 starDescriptionText.text = StarRatingManager.Instance.GetStarDescription(earnedStars);
+            }
+            
+            if (scoreText != null)
+            {
+                scoreText.text = $"Score: {finalScore:N0}";
+                StartCoroutine(AnimateScoreText(scoreText, 0.3f));
+            }
+            
+            if (scoreBreakdownText != null && !string.IsNullOrEmpty(scoreBreakdown))
+            {
+                scoreBreakdownText.text = scoreBreakdown;
+                StartCoroutine(AnimateScoreText(scoreBreakdownText, 0.6f));
             }
             
             if (earnedStars > 0)
@@ -275,15 +387,7 @@ namespace Managers
             if (ParticleEffectManager.Instance != null)
             {
                 Color starColor = StarRatingManager.Instance.GetStarColor(earnedStars);
-                
-                for (int i = 0; i < 8; i++)
-                {
-                    float angle = i * 45f * Mathf.Deg2Rad;
-                    Vector3 direction = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
-                    Vector3 spawnPos = position + direction * 0.2f;
-                    
-                    ParticleEffectManager.Instance.CreateCubeBlastEffect(spawnPos, starColor, "star");
-                }
+                ParticleEffectManager.Instance.CreateStarBurstEffect(position, starColor, 8);
             }
         }
         
@@ -292,19 +396,7 @@ namespace Managers
             if (ParticleEffectManager.Instance != null)
             {
                 Color starColor = StarRatingManager.Instance.GetStarColor(earnedStars);
-                
-                // Create a spectacular burst based on star count
-                int burstCount = earnedStars * 12;
-                
-                for (int i = 0; i < burstCount; i++)
-                {
-                    float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
-                    float distance = Random.Range(0.5f, 2f);
-                    Vector3 direction = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
-                    Vector3 spawnPos = position + direction * distance;
-                    
-                    ParticleEffectManager.Instance.CreateCubeBlastEffect(spawnPos, starColor, "star");
-                }
+                ParticleEffectManager.Instance.CreateStarCelebrationEffect(position, earnedStars, starColor);
             }
         }
         
@@ -343,6 +435,37 @@ namespace Managers
             float s = p / 4f;
             
             return (Mathf.Pow(2f, -10f * t) * Mathf.Sin((t - s) * (2f * Mathf.PI) / p) + 1f);
+        }
+        
+        private System.Collections.IEnumerator AnimateScoreText(TextMeshProUGUI textComponent, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            
+            textComponent.gameObject.SetActive(true);
+            
+            Color originalColor = textComponent.color;
+            Vector3 originalScale = textComponent.transform.localScale;
+            
+            textComponent.color = new Color(originalColor.r, originalColor.g, originalColor.b, 0f);
+            textComponent.transform.localScale = originalScale; // Keep original scale
+            
+            float duration = 0.8f; 
+            float elapsed = 0f;
+            
+            while (elapsed < duration)
+            {
+                float t = elapsed / duration;
+                
+                Color color = originalColor;
+                color.a = Mathf.Lerp(0f, originalColor.a, Mathf.SmoothStep(0f, 1f, t));
+                textComponent.color = color;
+                
+                elapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            
+            textComponent.color = originalColor;
+            textComponent.transform.localScale = originalScale;
         }
     }
 } 
