@@ -24,12 +24,25 @@ namespace Managers
         
         private Dictionary<ObstacleType, int> goalCounts = new Dictionary<ObstacleType, int>();
         private int remainingMoves;
+        private int totalMoves; // Track total moves for star calculation
+        private int usedMoves; // Track used moves for star calculation
+
+        public int GetUsedMoves() => usedMoves;
+        public int GetTotalMoves() => totalMoves;
 
         public void Initialize(Dictionary<ObstacleType, int> goals, int moveCount)
         {
             goalCounts = goals;
             remainingMoves = moveCount;
+            totalMoves = moveCount;
+            usedMoves = 0;
             UpdateMovesDisplay();
+
+            // Start timer when level begins
+            if (StarRatingManager.Instance != null)
+            {
+                StarRatingManager.Instance.StartTimer();
+            }
 
             // Activate only needed goal items
             foreach (var item in goalItems)
@@ -51,6 +64,7 @@ namespace Managers
             if (remainingMoves <= 0) return;
             
             remainingMoves--;
+            usedMoves++;
             
             UpdateMovesDisplay();
         }
@@ -102,11 +116,20 @@ namespace Managers
             // Player can win the level with his/her last move
             if (allGoalsComplete)
             {
+                // Stop timer when level is won
+                if (StarRatingManager.Instance != null)
+                {
+                    StarRatingManager.Instance.StopTimer();
+                }
                 StartCoroutine(DelayedWinScreen());
             }
             // PRIORITY 2: Lose condition - only if goals are not complete and no moves left
             else if (remainingMoves <= 0)
             {
+                if (StarRatingManager.Instance != null)
+                {
+                    StarRatingManager.Instance.StopTimer();
+                }
                 StartCoroutine(DelayedLoseScreen());
             }
         }
