@@ -36,6 +36,7 @@ namespace Managers
         
         // Track objects currently animating to prevent conflicts
         private HashSet<Transform> animatingTransforms = new HashSet<Transform>();
+        private HashSet<Vector2Int> animatingPositions = new HashSet<Vector2Int>();
 
         private Vector3 gridOffset;
 
@@ -355,18 +356,19 @@ namespace Managers
                 for (int y = 1; y < height; y++)
                 {
                     ObstacleBlock obs = obstacles[x, y];
-                    // Only Vase can fall
-                    if (obs is not null && obs.CanFall())
+                    // Only Vase can fall and not already animating
+                    if (obs != null && obs.CanFall() && !animatingTransforms.Contains(obs.transform))
                     {
                         int dropY = y;
                         
                         // Find how far this obstacle can drop
                         while (dropY > 0)
                         {
-                            // Check if the position below is blocked
-                            if (obstacles[x, dropY - 1] is not null || 
-                                cubes[x, dropY - 1] is not null || 
-                                rockets[x, dropY - 1] is not null)
+                            // Check if the position below is blocked or if something is already animating there
+                            if (obstacles[x, dropY - 1] != null || 
+                                cubes[x, dropY - 1] != null || 
+                                rockets[x, dropY - 1] != null ||
+                                IsPositionBeingAnimatedTo(x, dropY - 1))
                             {
                                 break; // Can't drop further
                             }
@@ -376,12 +378,15 @@ namespace Managers
                         // Move the obstacle if it can drop
                         if (dropY != y)
                         {
+                            // Mark position as being animated to
+                            SetPositionAnimating(x, dropY, true);
+                            
                             obstacles[x, y] = null;
                             obstacles[x, dropY] = obs;
                             obs.gridPosition = new Vector2Int(x, dropY);
                             
                             // Use enhanced animation for obstacles with different effects for vase
-                            StartCoroutine(AnimateObstacleFall(obs.transform, GetWorldPosition(x, dropY), obs.obstacleType));
+                            StartCoroutine(AnimateObstacleFallSafe(obs.transform, GetWorldPosition(x, dropY), obs.obstacleType, x, dropY));
                             somethingDropped = true;
                         }
                     }
@@ -467,6 +472,113 @@ namespace Managers
             {
                 animatingTransforms.Remove(obstacleTransform);
             }
+        }
+        
+        private bool IsPositionBeingAnimatedTo(int x, int y)
+        {
+            return animatingPositions.Contains(new Vector2Int(x, y));
+        }
+        
+        private void SetPositionAnimating(int x, int y, bool isAnimating)
+        {
+            Vector2Int pos = new Vector2Int(x, y);
+            if (isAnimating)
+            {
+                animatingPositions.Add(pos);
+            }
+            else
+            {
+                animatingPositions.Remove(pos);
+            }
+        }
+        
+        private IEnumerator AnimateObstacleFallSafe(Transform obstacleTransform, Vector3 targetPosition, ObstacleType obstacleType, int targetX, int targetY)
+        {
+            if (obstacleTransform == null) 
+            {
+                SetPositionAnimating(targetX, targetY, false);
+                yield break;
+            }
+            
+            // Check if already animating to prevent conflicts
+            if (animatingTransforms.Contains(obstacleTransform)) 
+            {
+                SetPositionAnimating(targetX, targetY, false);
+                yield break;
+            }
+            
+            // Add to tracking set
+            animatingTransforms.Add(obstacleTransform);
+            
+            Vector3 startPosition = obstacleTransform.position;
+            float fallDistance = startPosition.y - targetPosition.y;
+            
+            // Different animation styles based on obstacle type
+            float baseDuration = 0.45f; // Slightly slower than cubes
+            float duration = Mathf.Max(0.25f, baseDuration + (fallDistance * 0.06f));
+            
+            float elapsed = 0f;
+            Vector3 originalScale = obstacleTransform.localScale;
+            
+            // Vases get different animation than other obstacles
+            bool isVase = obstacleType == ObstacleType.Vase;
+            float wobbleIntensity = isVase ? 0.03f : 0.01f; // Vases wobble more
+            float rotationSpeed = isVase ? Random.Range(-90f, 90f) : Random.Range(-45f, 45f);
+            
+            while (elapsed < duration)
+            {
+                if (obstacleTransform == null) 
+                {
+                    animatingTransforms.Remove(obstacleTransform);
+                    SetPositionAnimating(targetX, targetY, false);
+                    yield break;
+                }
+                
+                elapsed += Time.deltaTime;
+                float t = elapsed / duration;
+                
+                // Slightly different easing for obstacles (more realistic weight)
+                float easeT;
+                if (t < 0.6f)
+                {
+                    easeT = t * t * 1.6f; // Heavier acceleration
+                }
+                else
+                {
+                    float bounceT = (t - 0.6f) / 0.4f;
+                    easeT = 0.6f * 0.6f * 1.6f + bounceT * bounceT * 0.4f;
+                }
+                
+                Vector3 currentPos = Vector3.Lerp(startPosition, targetPosition, easeT);
+                
+                // Add wobble effect (vases wobble more as they're fragile)
+                float wobbleOffset = Mathf.Sin(elapsed * 12f) * wobbleIntensity * (1f - t);
+                currentPos.x += wobbleOffset;
+                
+                obstacleTransform.position = currentPos;
+                
+                float scaleEffect = 1f + Mathf.Sin(elapsed * 8f) * 0.03f * (1f - t);
+                obstacleTransform.localScale = originalScale * scaleEffect;
+                
+                // Rotation effect (vases rotate more)
+                float currentRotation = rotationSpeed * elapsed * (1f - t);
+                obstacleTransform.rotation = Quaternion.Euler(0, 0, currentRotation);
+                
+                yield return null;
+            }
+
+            // Landing effect
+            if (obstacleTransform != null)
+            {
+                yield return StartCoroutine(AnimateObstacleLanding(obstacleTransform, targetPosition, originalScale, isVase));
+            }
+            
+            // Clean up tracking
+            if (animatingTransforms.Contains(obstacleTransform))
+            {
+                animatingTransforms.Remove(obstacleTransform);
+            }
+            SetPositionAnimating(targetX, targetY, false);
         }
         
         private IEnumerator AnimateObstacleLanding(Transform obstacleTransform, Vector3 targetPosition, Vector3 originalScale, bool isVase)
@@ -638,10 +750,11 @@ namespace Managers
                 for (int y = height - 1; y >= 0; y--)
                 {
                     // Condition to check is there is an empty cell where is no any obstacle under it
-                    // (For stone and box)
-                    if (cubes[x, y] is null && 
-                        obstacles[x, y] is null && 
-                        rockets[x, y] is null)
+                    // (For stone and box) AND not being animated to
+                    if (cubes[x, y] == null && 
+                        obstacles[x, y] == null && 
+                        rockets[x, y] == null &&
+                        !IsPositionBeingAnimatedTo(x, y))
                     {
                         // Create the cube to fall down with enhanced spawning
                         BlockColor randomColor = GetRandomColorEnum();
@@ -660,9 +773,9 @@ namespace Managers
 
                         spawnY++; // jump to up of the cell to fall new blocks
                     }
-                    else if (obstacles[x, y] is not null || cubes[x, y] is not null)
+                    else if (obstacles[x, y] != null || cubes[x, y] != null || IsPositionBeingAnimatedTo(x, y))
                     {
-                        // If there is a cube or an obstacle, +1 spawn position on y-axis
+                        // If there is a cube, obstacle, or position being animated to, +1 spawn position on y-axis
                         spawnY = y + 1;
                     }
                 }
@@ -1005,6 +1118,10 @@ namespace Managers
         
         public IEnumerator ExplodeRemainingRockets()
         {
+            // Disable input during final rocket explosions
+            bool originalProcessingState = isProcessingMoves;
+            isProcessingMoves = true;
+            
             List<RocketBlock> remainingRockets = new List<RocketBlock>();
             
             for (int x = 0; x < width; x++)
@@ -1018,7 +1135,11 @@ namespace Managers
                 }
             }
             
-            if (remainingRockets.Count == 0) yield break;
+            if (remainingRockets.Count == 0) 
+            {
+                isProcessingMoves = originalProcessingState;
+                yield break;
+            }
             
             // Explode rockets in sequence with normal rocket logic
             foreach (var rocket in remainingRockets)
@@ -1064,6 +1185,9 @@ namespace Managers
                 ParticleEffectManager.Instance.CreateComboBlastEffect(centerScreen, remainingRockets.Count);
                 yield return new WaitForSeconds(0.5f);
             }
+            
+            // Restore original input state
+            isProcessingMoves = originalProcessingState;
         }
         
         public int CountRemainingRockets()
